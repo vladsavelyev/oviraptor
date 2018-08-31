@@ -30,7 +30,7 @@ Then we filter high quality reads:
 - paired
 
 ```
-./filter_bam_highqual.py diploid_tumor-unmapped_or_mate.namesorted.bam
+./filter_unmapped_bam.py diploid_tumor-unmapped_or_mate.namesorted.bam
 Total:              28,564,510 out of 2,230,924,710
 lng_i:              27,894,774
 hqual_i:            15,326,411
@@ -164,13 +164,13 @@ minimap2 -a HPV18.fa spades/contigs.fasta | samtools sort > spades/contigs_to_HP
 
 Reads getting assembled pretty well into 4 long contigs:
 
-![quast](assemble/diploid/img/quast_HPV18.png)
+![quast](img/quast_HPV18.png)
 
-![icarus](assemble/diploid/img/icarus_HPV18.png)
+![icarus](img/icarus_HPV18.png)
 
 All 4 contigs touch each other and cover the assembly fully uniformly, which is a strong evidence of the virus being present in the dataset with possible breakpoints in integration sites. NODE_2, NODE_3 and NODE_4 are amplified heavily up to 5kX coverage, and NODE_1 has a much smaller coverage. The genome is clearly circular - NODE_2 spans the edges, and the breakpoing supported by discordant pairs:
 
-![igv](assemble/diploid/img/igv_HPV18.png)
+![igv](img/igv_HPV18.png)
 
 
 ## Looking for integration sites
@@ -192,21 +192,21 @@ minimap2 -ax sr GRCh37_HPV18/GRCh37_HPV18.fa to_HPV18.mapped_or_mate.R1.fq to_HP
 
 HPV18 region of the spiked reference in IGV, groupped by the chromosome of mate (based on [the color scheme](https://software.broadinstitute.org/software/igv/interpreting_insert_size) - the small green group is from chromosome 3, large purple group is from chromosome 8, and all gray read pairs are entirely mapped to HPV18). Read direction is annotated with arrows.
 
-![igv](assemble/diploid/img/igv_spike_HPV18.png)
+![igv](img/igv_spike_HPV18.png)
 
 There is a quite evident support for human genome integration to chromosome 8 (with purple reads), and a smaller support for the chromosome 3 integration with the green reads. All those colored read piles are consitently one direction and their mates simmetrically cluster in GRCh37.
 
 The leftmost purple reads mates are mapping mapping to 8:128,303,800-128,304,900 
 
-![igv](assemble/diploid/img/igv_spike_integration_site_chr8_leftmost.png)
+![igv](img/igv_spike_integration_site_chr8_leftmost.png)
 
 The second purple pile in the beginning of NODE_3 has its mates mapping 16kb apart - to 8:128,319,000-128,321,000:
 
-![igv](assemble/diploid/img/igv_spike_integration_site_chr8_right_1.png)
+![igv](img/igv_spike_integration_site_chr8_right_1.png)
 
 The rightmost purple pile mates is mapping nearby the leftmost pile - to 8:128,307,000-128,308,000
 
-![igv](assemble/diploid/img/igv_spike_integration_site_chr8_right_2.png)
+![igv](img/igv_spike_integration_site_chr8_right_2.png)
 
 This suggest that the deeply covered NODE_2-NODE_3-NODE_4 part of the virus got inserted into chromosome 8.
 
@@ -214,7 +214,7 @@ Also, the green reads map to 3:186,691,636-186,699,490, suggesting possible anot
 
 Another interesting obervation comes from blasting the contigs against all human sequences: it reports 18% coverage in a chr8 alternative assembly, and same 18% in hg38:
 
-![blast](assemble/diploid/img/blast_HPV18.png)
+![blast](img/blast_HPV18.png)
 
 It would be interesting to repeat the whole experiment with hg38.
 
@@ -227,7 +227,7 @@ The read orientations spanning the breakpoints suggest a quite complex event rat
 ~/bin/sambamba slice diploid_tumor-ready.bam 8:128302800-128322000 > diploid_tumor-chr8_HPV18.bam
 ```
 
-![igv](assemble/diploid/img/igv_GRCh37_full_region.png)
+![igv](img/igv_GRCh37_full_region.png)
 
 We can see that 2 of the breakpoint positions show up very clearly, and it's also evident that:
 
@@ -237,7 +237,7 @@ We can see that 2 of the breakpoint positions show up very clearly, and it's als
 
 That suggests that the virus and created a loop by attaching to the leftmost and rightmost breakpoints, and this loop went around multiple times, heavily amplifying the chr8 16kb region as well as the viral region NODE_2-NODE_3-NODE_4. While looping, it also likely occasionally got attached to the inner left breakpoint instead of the leftmost one. Indeed, things like this are typical for HPV viruses:
 
-![igv](assemble/diploid/img/HPV_loop_from_paper.png)
+![igv](img/HPV_loop_from_paper.png)
 
 (Image from [Akagi et all](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3912410))
 
@@ -275,11 +275,11 @@ E2 regulates E6 and E7, however the viral integration usually disrupts it:
 
 ["The viral genome is most often integrated in such a way as to disrupt the E2 gene and, thus, alleviate transcriptional repression of the early viral promoter. In turn, this causes dysregulation of the E6 and E7 oncogenes and promotes malignant progression"](https://www.researchgate.net/figure/HPV18-genome-The-circular-dsDNA-genome-of-HPV18-7-857-bp-is-shown-Viral-open-reading_fig1_236977461):
 
-![hpv_genes](assemble/diploid/img/HPV18-genome-The-circular-dsDNA-genome-of-HPV18-7-857-bp-is-shown-Viral-open-reading.png)
+![hpv_genes](img/HPV18-genome-The-circular-dsDNA-genome-of-HPV18-7-857-bp-is-shown-Viral-open-reading.png)
 
 By overlaying [HPV18 genes](https://www.ncbi.nlm.nih.gov/gene/1489088) on coverage, we can see that E6 and E7 are amplified heavily:
 
-![igv](assemble/diploid/img/HPV18_genes.png)
+![igv](img/HPV18_genes.png)
 
 However, the integration site doesn't disrupt E2, but it's covered in a much lower rate than the oncogenes. It would be interesting to perform and RNAseq on this sample and quantify the expression of E6, E7, E2, MYC, MYC, TP53, and RB1; additionally, MYC significantly upregulates genes with already high expression, so it would be interesting to look for overexpressed genes.
 
@@ -377,7 +377,7 @@ Here, we try the same approach we used for the NeverResponder, but for COLO829.
 ~/bin/sambamba slice diploid_tumor-ready.bam 3:186,691,636-186,699,490 > diploid_tumor-chr3_HPV18.bam
 ```
 
-![igv](assemble/diploid/img/igv_GRCh37_chr3_integration_site.png)
+![igv](img/igv_GRCh37_chr3_integration_site.png)
 
 Not clear about this one.
 
