@@ -1,6 +1,6 @@
 # Oncoviral integration in cervical never-responder
 
-A patient with a possible very atypical cervical carcinoma has not responded to any standard therapies. There were no obvious oncogenic drivers, however the whole genome NGS analysis showed possible HPV content, which is [strongly associated with cervical carcinoma](http://www.who.int/mediacentre/factsheets/fs380/en/). Here we explore the viral sequences in genomic data and their oncogenicity.
+A patient with a possible very atypical cervical carcinoma has not responded to any standard therapies. There were no obvious oncogenic drivers, however the whole genome NGS analysis showed possible HPV content, which is [strongly associated with cervical carcinoma](http://www.who.int/mediacentre/factsheets/fs380/en/). Here we explore the viral sequences in genomic data and their oncogenicity. This readme contains a summary for the findings. For technical notes with commands, see [NeverResponder_with_commands.md](https://github.com/umccr/oncoviruses/blob/master/NeverResponder_with_commands.md).
 
 
 ## Exploring taxonomic content
@@ -26,7 +26,7 @@ We used the unmapped reads to feed them into a de novo genome assembler SPAdes. 
 
 ![icarus](img/icarus_HPV18.png)
 
-All 4 contigs together evenly cover the whole reference sequence. NODE\_2, NODE\_3 and NODE\_4 are amplified heavily up to 5kX coverage, and NODE\_1 has a significantly lower coverage. The genome is clearly circular - NODE\_2 spans the edges, and the breakpoing supported by discordant pairs as evident in IGV:
+All 4 contigs together evenly cover the whole reference sequence. NODE\_2, NODE\_3 and NODE\_4 are amplified heavily up to 5kX coverage, and NODE\_1 has a significantly lower coverage. The genome is clearly circular - NODE\_2 spans the edges, and the breakpoint supported by discordant pairs as evident in IGV:
 
 ![igv](img/igv_HPV18.png)
 
