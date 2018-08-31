@@ -4,9 +4,21 @@ import os
 from numpy import mean
 import pysam
 
+""" Extract all read groups where all mates are good reads:
+    - at least 125bp
+    - with all bases quality >=10
+    - with mean bases quality >=25
+    - paired
+    - not qc_failed
+    And at least one mate is good mapped:
+    - mapped
+    - not secondary
+    - not duplicated
+    - mapping quality !=0
+    - alignment length >=60
 
-""" Usage:
-./filter_unmapped_bam.py input.bam output.bam --10x
+Usage:
+./filter_good_discordant_mates.py input.bam output.bam --10x
 """
 
 
@@ -32,7 +44,7 @@ def is_good_mapped_read(r_):
     """ We filter reads unmapped to a human genome, or having a mapped mate. 
         We want that mate to be a primary alignment, high quality and not duplicate. """
     return \
-        not mate.is_unmapped and \
+        not r_.is_unmapped and \
         not r_.is_secondary and \
         not r_.is_duplicate and \
         r_.mapping_quality != 0 and \
@@ -57,7 +69,7 @@ def is_good_read(r_):
 
 
 def resolve_mates(mates):
-    # We want all high phred quaality pairs, where at least one read is mapped with a good quality:
+    # We want all high phred quality pairs, where at least one read is mapped with a good quality:
     if any(is_good_mapped_read(mate) for mate in mates) and \
        all(is_good_read(mate) for mate in mates):
         for mate in mates:

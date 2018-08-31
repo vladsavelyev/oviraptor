@@ -30,7 +30,7 @@ Then we filter high quality reads:
 - paired
 
 ```
-./filter_unmapped_bam.py diploid_tumor-unmapped_or_mate.namesorted.bam
+./filter_bam_good_discordant_mates.py diploid_tumor-unmapped_or_mate.namesorted.bam
 Total:              28,564,510 out of 2,230,924,710
 lng_i:              27,894,774
 hqual_i:            15,326,411

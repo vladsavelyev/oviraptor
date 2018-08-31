@@ -5,7 +5,9 @@ from numpy import mean
 import pysam
 
 
-""" Usage:
+""" Extracts read groups where at least one mate is mapped good. 
+Based on `filter_good_discordant_pairs.py`, but doesn't require reads to have good FASTQ quality, neither be discordant. Useful for virus-aligned BAMs.
+Usage:
 ./filter_viral_bam.py input.bam output.bam
 """
 
@@ -29,6 +31,8 @@ writing_mates = []
 
 
 def is_good_mapped_read(r_):
+    """ We filter reads unmapped to a human genome, or having a mapped mate. 
+        We want that mate to be a primary alignment, high quality and not duplicate. """
     return \
         not r_.is_unmapped and \
         not r_.is_secondary and \
