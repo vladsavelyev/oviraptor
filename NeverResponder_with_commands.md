@@ -1,19 +1,20 @@
-# Oncoviruses in DiploidNeverResponder
+# Oncoviruses in DiploidNeverResponder <!-- omit in toc --> 
 
 Some insertions in human samples cannot be reconstructed by the read alignment to human genome reference, because they have an external origin. For example, [oncoviruses](https://en.wikipedia.org/wiki/Oncovirus) that often cause malignancies by integrating into a human genome. Here, we explore such novel insertions in a [DiploidNeverResponder](https://trello.com/c/4gdQ4Tmi/65-diploid-never-responder) sample sequenced in UMCCR, and see if we can reconstruct their sequences and locate their integration sites. Authors: Vlad Saveliev and Arthur Hsu.
 
-### Contents
+### Contents <!-- omit in toc --> 
 
-* [Extracting unmapped reads](#extracting-unmapped-reads)
-* [Exploring taxonomic content](#exploring-taxonomic-content)
-  + [Mash](#mash)
-  + [BWA-MEM](#bwa-mem)
-* [De-novo assembling HPV18](#de-novo-assembling-hpv18-region)
-* [Looking for integration sites](#looking-for-integration-sites)
-* [chr8 integration site](#chr8-integration-site)
-  + [Host genes](#host-genes)
-  + [HPV oncogenes](#hpv-oncogenes)
-* [10x COLO829](#10x-colo829)
+- [Extracting unmapped reads](#extracting-unmapped-reads)
+- [Exploring taxonomic content](#exploring-taxonomic-content)
+  - [Mash vs GDC-viral](#mash-vs-gdc-viral)
+  - [BWA-MEM vs GDC-viral](#bwa-mem-vs-gdc-viral)
+- [De-novo assembling HPV18 region](#de-novo-assembling-hpv18-region)
+- [Looking for integration sites](#looking-for-integration-sites)
+- [chr8 integration site](#chr8-integration-site)
+  - [Host genes](#host-genes)
+  - [HPV oncogenes](#hpv-oncogenes)
+- [Exprerimenting with 10x](#exprerimenting-with-10x)
+- [10x COLO829](#10x-colo829)
 
 
 ## Extracting unmapped reads
@@ -30,7 +31,7 @@ Then we filter high quality reads:
 - paired
 
 ```
-./filter_bam_good_discordant_mates.py diploid_tumor-unmapped_or_mate.namesorted.bam
+./filter_bam_good_unmapped_or_mate.py diploid_tumor-unmapped_or_mate.namesorted.bam
 Total:              28,564,510 out of 2,230,924,710
 lng_i:              27,894,774
 hqual_i:            15,326,411
@@ -359,7 +360,7 @@ This data looks much more noisy. Remapping same data using BWA to see if has to 
 
 
 
-## 10x COLO829
+## 10x COLO829 
 
 In [this document](README.md), we are trying a different BX tag based approach to explore unmapped reads in 10x data.
 
@@ -369,9 +370,9 @@ Here, we try the same approach we used for the NeverResponder, but for COLO829.
 
 ----
 
-## Playground
+## Playground <!-- omit in toc --> 
 
-#### chr3 integration site
+#### chr3 integration site <!-- omit in toc --> 
 
 ```
 ~/bin/sambamba slice diploid_tumor-ready.bam 3:186,691,636-186,699,490 > diploid_tumor-chr3_HPV18.bam
@@ -381,15 +382,15 @@ Here, we try the same approach we used for the NeverResponder, but for COLO829.
 
 Not clear about this one.
 
-#### Aligning to GRCh38
+#### Aligning to GRCh38 <!-- omit in toc --> 
 
-#### Structural variants in this genome location
+#### Structural variants in this genome location <!-- omit in toc --> 
 
-#### Expreriment with 10x data
+#### Expreriment with 10x data <!-- omit in toc --> 
 
 In [this document](README.md), we are experimenting with an external 10x dataset NA12878 and an internally sequences COLO829.
 
-#### Local assembly of chr8+HPV region
+#### Local assembly of chr8+HPV region <!-- omit in toc --> 
 
 ```
 samtools sort -n to_GRCh37_HPV18__plus_human_reads_and_MYC.bam -O bam -o to_GRCh37_HPV18__plus_human_reads_and_MYC.sorted.bam

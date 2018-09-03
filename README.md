@@ -118,7 +118,7 @@ Extracting all unmapped reads, as well as mapped reads with unmapped mate, that 
 sambamba view -f bam -F "unmapped or mate_is_unmapped" -t 30 $ORI_BAM | samtools sort -n -@ 30 > $PFX.unmapped_or_mate.bam
  
 # filter out bad fastq and alignments
-./filter_bam_good_discordant_mates.py $PFX.unmapped_or_mate.bam $PFX.unmapped_or_mate.lng_hqual.bam
+./filter_bam_good_unmapped_or_mate.py $PFX.unmapped_or_mate.bam $PFX.unmapped_or_mate.lng_hqual.bam
 
 # convert to paired fastq
 samtools fastq $PFX.unmapped_or_mate.lng_hqual.bam -1 $PFX.unmapped_or_mate.R1.fq -2 $PFX.unmapped_or_mate.R2.fq -s $PFX.unmapped_or_mate.single.fq
