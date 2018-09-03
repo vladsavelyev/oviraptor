@@ -118,7 +118,7 @@ HPV25  7713  0.11     0.01  0.01  0.00
 HPV14  7713  0.05     0.01  0.00  0.00
 ```
 
-HPV18 has an extremely high coverage. Aligning to HPV18 only to make sure none of the related virus didn't hijacked any reads:
+HPV18 has an extremely high coverage. Aligning to HPV18 only to make sure none of the related virus didn't hijack any reads:
 
 ```
 samtools faidx /g/data3/gx8/extras/vlad/bcbio/genomes/Hsapiens/GRCh37/viral/gdc-viral.fa HPV18 > viral_mapping/HPV18.fa
