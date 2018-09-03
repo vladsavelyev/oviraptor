@@ -212,7 +212,7 @@ This suggest that the deeply covered NODE_2-NODE_3-NODE_4 part of the virus got 
 
 Also, the green reads map to 3:186,691,636-186,699,490, suggesting possible another integration site. There might be also another less abundant strain of virus, worth exploring other viral sequences to confirm - spiking GRCh37 with the whole GDC database and realigning all human-unmapped reads.
 
-Another interesting obervation comes from blasting the contigs against all human sequences: it reports 18% coverage in a chr8 alternative assembly, and same 18% in hg38:
+Another interesting observation comes from blasting the contigs against all human sequences: it reports 18% coverage in a chr8 alternative assembly, and same 18% in hg38:
 
 ![blast](img/blast_HPV18.png)
 
@@ -233,7 +233,7 @@ We can see that 2 of the breakpoint positions show up very clearly, and it's als
 
 - The NODE_2-NODE_3-NODE_4 region is amplified heavily instead of being deleted, meaning that the virus didn't replace the region with itself resulting in some more complex event;
 - The read orientations tell us that the viral amplified region got attached to the rightmost chr8 breakpoint from the right side, and to the left breakpoints from the left side, which rejects the idea of a simple insertion;
-- chr8 region between the breakpoints is heavily amplified, at roughly the same coverage as the viral amplified regon.
+- chr8 region between the breakpoints is heavily amplified, at roughly the same coverage as the viral amplified region.
 
 That suggests that the virus and created a loop by attaching to the leftmost and rightmost breakpoints, and this loop went around multiple times, heavily amplifying the chr8 16kb region as well as the viral region NODE_2-NODE_3-NODE_4. While looping, it also likely occasionally got attached to the inner left breakpoint instead of the leftmost one. Indeed, things like this are typical for HPV viruses:
 
