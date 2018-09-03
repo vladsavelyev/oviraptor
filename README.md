@@ -105,7 +105,7 @@ However, the relationship of the virus to such regional structural abnormalities
 
 ## Processing commands
 
-### Searching for integrating viruses
+### Searching for viruses
 
 ```
 ORI_BAM=/path/to/sample-ready.bam
@@ -139,25 +139,31 @@ tsv viral_mapping/$PFX_to_gdc-completeness.txt
 ```
 
 
-### Integration sites
+### Checking integration
 
-Getting reads mapping to the virus
+Integrating viruses should have a high content of unmapped reads in the last column in its `samtools idxstats` record, because those are the unmapped reads have mates mapped to the virus, and thus bridge it with the human genome.
+
+```
+samtools idxstats to_$VIRUS.mapped_or_mate.bam
+```
+
+Now exploring viruses with a high rate of brigding pairs (for e.g., HPV17).
 
 ```
 VIRUS=HPV17
 
 # get the virus sequence
-samtools faidx human_plus_viral_genome/gdc-viral.fa $VIRUS > $PFX_viral_mapping/$VIRUS.fa
+samtools faidx human_plus_viral_genome/gdc-viral.fa $VIRUS > ${PFX}_viral_mapping/$VIRUS.fa
 bwa index $PFX_viral_mapping/$VIRUS.fa
 
 # align to the virus
-bwa mem -t 30 $PFX_viral_mapping/$VIRUS.fa $PFX_unmapped_or_mate.R1.fq $PFX_unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=$PFX_viral_mapping/to_$VIRUS.bam.bai O=$PFX_viral_mapping/to_$VIRUS.bam
+bwa mem -t 30 ${PFX}_viral_mapping/$VIRUS.fa $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=${PFX}_viral_mapping/to_$VIRUS.bam.bai O=${PFX}_viral_mapping/to_$VIRUS.bam
 ```
 
 Getting reads that map to the CMV with one mate:
 
 ```
-cd $PFX_viral_mapping
+cd ${PFX}_viral_mapping
 samtools view to_$VIRUS.bam $VIRUS -o to_$VIRUS.mapped_or_mate.bam
 
 samtools sort -n to_$VIRUS.mapped_or_mate.bam -O bam -o to_$VIRUS.mapped_or_mate.namesorted.bam
@@ -171,4 +177,16 @@ To explore integration sites, remapping to human+virus database:
 minimap2 -ax sr ../human_plus_viral_genome/human_gdc-viral.fa to_$VIRUS.mapped_or_mate.R1.fq to_$VIRUS.mapped_or_mate.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bam.bai O=to_human_$VIRUS.bam
 ```
 
-Exploring in IGV with `/data/cephfs/punim0010/extras/vlad/synced/HGT-ID/resources/human_gdc-viral.fa` reference.
+Exploring in IGV with `/data/cephfs/punim0010/extras/vlad/synced/HGT-ID/resources/human_gdc-viral.fa` reference. Going to the viral contig, groupping reads by chromosome of mate, seeing if many reads have mates mapped on human. Coloring reads by pair orientation to see if and how orientation support the breakpoints.
+
+Optional - viral de-novo assembly:
+
+```
+samtools sort -n to_$VIRUS.mapped_or_mate.bam -O bam -o to_$VIRUS.mapped_or_mate.namesorted.bam
+samtools fastq to_$VIRUS.mapped_or_mate.namesorted.bam -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s 
+to_$VIRUS.mapped_or_mate.single.fq
+spades.py --only-assembler -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s to_$VIRUS.mapped_or_mate.single.fq -o spades
+# QC the assembly - stats and alignment back to the virus
+quast.py spades/contigs.fasta -R $VIRUS.fa -o spades/quast --ref-bam to_$VIRUS.mapped_or_mate.namesorted.bam --no-read-stats --no-sv -1 to_HPV18.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq --debug
+minimap2 -a $VIRUS.fa spades/contigs.fasta | samtools sort > spades/contigs_to_$VIRUS.bam && samtools index spades/contigs_to_$VIRUS.bam
+```
