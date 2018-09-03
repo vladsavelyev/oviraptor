@@ -103,3 +103,72 @@ However, the relationship of the virus to such regional structural abnormalities
 
 
 
+## Processing commands
+
+### Searching for integrating viruses
+
+```
+ORI_BAM=/path/to/sample-ready.bam
+PFX=sample
+```
+
+Extracting all unmapped reads, as well as mapped reads with unmapped mate, that could confirm integration:
+
+```
+sambamba view -f bam -F "unmapped or mate_is_unmapped" -t 30 $ORI_BAM | samtools sort -n -@ 30 > $PFX.unmapped_or_mate.bam
+ 
+# filter out bad fastq and alignments
+./filter_bam_good_discordant_mates.py $PFX.unmapped_or_mate.bam $PFX.unmapped_or_mate.lng_hqual.bam
+
+# convert to paired fastq
+samtools fastq $PFX.unmapped_or_mate.lng_hqual.bam -1 $PFX.unmapped_or_mate.R1.fq -2 $PFX.unmapped_or_mate.R2.fq -s $PFX.unmapped_or_mate.single.fq
+```
+
+Getting reads mapping to the GDC database of oncoviral sequences:
+
+```
+mkdir $PFX_viral_mapping
+bwa mem -t 30 human_plus_viral_genome/gdc-viral $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=$PFX_viral_mapping/to_gdc.bam.bai O=$PFX_viral_mapping/to_gdc.bam
+```
+
+Viewing read mapping statistics:
+
+```
+bash check_cov.sh $PFX_viral_mapping/to_gdc.bam
+tsv viral_mapping/$PFX_to_gdc-completeness.txt
+```
+
+
+### Integration sites
+
+Getting reads mapping to the virus
+
+```
+VIRUS=HPV17
+
+# get the virus sequence
+samtools faidx human_plus_viral_genome/gdc-viral.fa $VIRUS > $PFX_viral_mapping/$VIRUS.fa
+bwa index $PFX_viral_mapping/$VIRUS.fa
+
+# align to the virus
+bwa mem -t 30 $PFX_viral_mapping/$VIRUS.fa $PFX_unmapped_or_mate.R1.fq $PFX_unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=$PFX_viral_mapping/to_$VIRUS.bam.bai O=$PFX_viral_mapping/to_$VIRUS.bam
+```
+
+Getting reads that map to the CMV with one mate:
+
+```
+cd $PFX_viral_mapping
+samtools view to_$VIRUS.bam $VIRUS -o to_$VIRUS.mapped_or_mate.bam
+
+samtools sort -n to_$VIRUS.mapped_or_mate.bam -O bam -o to_$VIRUS.mapped_or_mate.namesorted.bam
+
+samtools fastq to_$VIRUS.mapped_or_mate.namesorted.bam -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s to_$VIRUS.mapped_or_mate.single.fq
+```
+
+To explore integration sites, remapping to human+virus database:
+
+```
+minimap2 -ax sr ../human_plus_viral_genome/human_gdc-viral.fa to_$VIRUS.mapped_or_mate.R1.fq to_$VIRUS.mapped_or_mate.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bam.bai O=to_human_$VIRUS.bam
+```
+
+Exploring in IGV with `/data/cephfs/punim0010/extras/vlad/synced/HGT-ID/resources/human_gdc-viral.fa` reference.
