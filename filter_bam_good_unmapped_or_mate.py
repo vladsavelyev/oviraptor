@@ -18,7 +18,8 @@ import pysam
     - alignment length >=60
 
 Usage:
-./filter_good_discordant_mates.py input.bam output.bam --10x
+# INPUT: name-sorted BAM file
+./filter_good_discordant_mates.py input.name_sorted.bam output.bam --10x
 """
 
 
@@ -42,7 +43,8 @@ writing_mates = []
 
 def is_good_mapped_read(r_):
     """ We filter reads unmapped to a human genome, or having a mapped mate. 
-        We want that mate to be a primary alignment, high quality and not duplicate. """
+        We want that mate to be a primary alignment, high quality and not duplicate.
+    """
     return \
         not r_.is_unmapped and \
         not r_.is_secondary and \
@@ -69,19 +71,24 @@ def is_good_read(r_):
 
 
 def resolve_mates(mates):
-    # We want all high phred quality pairs, where at least one read is mapped with a good quality:
-    if any(is_good_mapped_read(mate) for mate in mates) and \
-       all(is_good_read(mate) for mate in mates):
-        for mate in mates:
-            bamf_bx_hqual_f.write(mate)
+    """ We want all high phred quality pairs, that either all are unmapped, or at least one read is mapped with a good quality.
+    """
+    if not all(is_good_read(aln) for aln in mates):
+        return []
+    mapped_mates = [aln for aln in mates if not aln.is_unmapped]
+    if mapped_mates:
+        if not all(is_good_mapped_read(aln) for aln in mapped_mates):
+            return []
+    return mates
+    
 
-
-for read in bamf:
-    if not writing_mates or writing_mates[0].query_name == read.query_name:
-        writing_mates.append(read)
+for aln in bamf:
+    if not writing_mates or writing_mates[0].query_name == aln.query_name:
+        writing_mates.append(aln)
     else:
-        resolve_mates(writing_mates)
-        writing_mates = [read]
+        for prev_aln in resolve_mates(writing_mates):
+            bamf_bx_hqual_f.write(prev_aln)
+        writing_mates = [aln]
 
     # TODO: try to reconstruct the original BX?
 
