@@ -118,7 +118,7 @@ Extracting all unmapped reads, as well as mapped reads with unmapped mate, that 
 sambamba view -f bam -F "unmapped or mate_is_unmapped" -t 30 $ORI_BAM | samtools sort -n -@ 30 > $PFX.unmapped_or_mate.bam
  
 # filter out bad fastq and alignments
-./filter_bam_good_unmapped_or_mate.py $PFX.unmapped_or_mate.bam $PFX.unmapped_or_mate.lng_hqual.bam
+python filter_bam_good_unmapped_or_mate.py $PFX.unmapped_or_mate.bam $PFX.unmapped_or_mate.lng_hqual.bam
 
 # convert to paired fastq
 samtools fastq $PFX.unmapped_or_mate.lng_hqual.bam -1 $PFX.unmapped_or_mate.R1.fq -2 $PFX.unmapped_or_mate.R2.fq -s $PFX.unmapped_or_mate.single.fq
@@ -127,48 +127,49 @@ samtools fastq $PFX.unmapped_or_mate.lng_hqual.bam -1 $PFX.unmapped_or_mate.R1.f
 Getting reads mapping to the GDC database of oncoviral sequences:
 
 ```
-mkdir $PFX_viral_mapping
-bwa mem -t 30 human_plus_viral_genome/gdc-viral $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=$PFX_viral_mapping/to_gdc.bam.bai O=$PFX_viral_mapping/to_gdc.bam
+mkdir $PFX.viral_mapping
+ln -s 
+bwa mem -t 30 human_plus_viral_genome/gdc-viral $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=$PFX.viral_mapping/to_gdc.bam.bai O=$PFX.viral_mapping/to_gdc.bam
 ```
 
 Viewing read mapping statistics:
 
 ```
-bash check_cov.sh $PFX_viral_mapping/to_gdc.bam
-tsv viral_mapping/$PFX_to_gdc-completeness.txt
+bash check_cov.sh $PFX.viral_mapping/to_gdc.bam
+tsv $PFX.viral_mapping/to_gdc-completeness.txt
 ```
 
 
 ### Checking integration
 
-Integrating viruses should have a high content of unmapped reads in the last column in its `samtools idxstats` record, because those are the unmapped reads have mates mapped to the virus, and thus bridge it with the human genome.
-
-```
-samtools idxstats to_$VIRUS.mapped_or_mate.bam
-```
-
 Now exploring viruses with a high rate of brigding pairs (for e.g., HPV17).
 
 ```
-VIRUS=HPV17
+VIRUS=HPV18
 
 # get the virus sequence
-samtools faidx human_plus_viral_genome/gdc-viral.fa $VIRUS > ${PFX}_viral_mapping/$VIRUS.fa
-bwa index $PFX_viral_mapping/$VIRUS.fa
+samtools faidx human_plus_viral_genome/gdc-viral.fa $VIRUS > ${PFX}.viral_mapping/$VIRUS.fa
+bwa index $PFX.viral_mapping/$VIRUS.fa
 
 # align to the virus
-bwa mem -t 30 ${PFX}_viral_mapping/$VIRUS.fa $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=${PFX}_viral_mapping/to_$VIRUS.bam.bai O=${PFX}_viral_mapping/to_$VIRUS.bam
+bwa mem -t 30 ${PFX}.viral_mapping/$VIRUS.fa $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=${PFX}.viral_mapping/to_$VIRUS.bam.bai O=${PFX}.viral_mapping/to_$VIRUS.bam
 ```
 
-Getting reads that map to the CMV with one mate:
+Getting reads that map to the virus with one mate:
 
 ```
-cd ${PFX}_viral_mapping
+cd ${PFX}.viral_mapping
 samtools view to_$VIRUS.bam $VIRUS -o to_$VIRUS.mapped_or_mate.bam
 
 samtools sort -n to_$VIRUS.mapped_or_mate.bam -O bam -o to_$VIRUS.mapped_or_mate.namesorted.bam
 
 samtools fastq to_$VIRUS.mapped_or_mate.namesorted.bam -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s to_$VIRUS.mapped_or_mate.single.fq
+```
+
+Integrating viruses should have a high content of unmapped reads (last column in `samtools idxstats` HPV18 record), because those are the unmapped reads have mates mapped to the virus, and thus bridge it with the human genome.
+
+```
+samtools idxstats to_$VIRUS.mapped_or_mate.bam | cut -f4
 ```
 
 To explore integration sites, remapping to human+virus database:
@@ -190,3 +191,25 @@ spades.py --only-assembler -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped
 quast.py spades/contigs.fasta -R $VIRUS.fa -o spades/quast --ref-bam to_$VIRUS.mapped_or_mate.namesorted.bam --no-read-stats --no-sv -1 to_HPV18.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq --debug
 minimap2 -a $VIRUS.fa spades/contigs.fasta | samtools sort > spades/contigs_to_$VIRUS.bam && samtools index spades/contigs_to_$VIRUS.bam
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
