@@ -115,21 +115,23 @@ PFX=sample
 Extracting all unmapped reads, as well as mapped reads with unmapped mate, that could confirm integration:
 
 ```
-sambamba view -f bam -F "unmapped or mate_is_unmapped" -t 30 $ORI_BAM | samtools sort -n -@ 30 > $PFX.unmapped_or_mate.bam
+sambamba view -f bam -F "unmapped or mate_is_unmapped" -t 28 $ORI_BAM | samtools sort -n -@ 28 > $PFX.unmapped_or_mate.bam
  
 # filter out bad fastq and alignments
 python filter_bam_good_unmapped_or_mate.py $PFX.unmapped_or_mate.bam $PFX.unmapped_or_mate.lng_hqual.bam
 
 # convert to paired fastq
 samtools fastq $PFX.unmapped_or_mate.lng_hqual.bam -1 $PFX.unmapped_or_mate.R1.fq -2 $PFX.unmapped_or_mate.R2.fq -s $PFX.unmapped_or_mate.single.fq
+
+# alternatively, converting raw reads:
+samtools fastq $PFX.unmapped_or_mate.bam -1 $PFX.unmapped_or_mate.all.R1.fq -2 $PFX.unmapped_or_mate.all.R2.fq -s $PFX.unmapped_or_mate.all.single.fq
 ```
 
 Getting reads mapping to the GDC database of oncoviral sequences:
 
 ```
 mkdir $PFX.viral_mapping
-ln -s 
-bwa mem -t 30 human_plus_viral_genome/gdc-viral $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=$PFX.viral_mapping/to_gdc.bam.bai O=$PFX.viral_mapping/to_gdc.bam
+bwa mem -t 28 /g/data/gx8/local/production/bcbio/genomes/Hsapiens/GRCh37/viral/gdc-viral.fa $PFX.unmapped_or_mate.all.R1.fq $PFX.unmapped_or_mate.all.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=$PFX.viral_mapping/to_gdc.bam.bai O=$PFX.viral_mapping/to_gdc.bam
 ```
 
 Viewing read mapping statistics:
@@ -152,7 +154,7 @@ samtools faidx human_plus_viral_genome/gdc-viral.fa $VIRUS > ${PFX}.viral_mappin
 bwa index $PFX.viral_mapping/$VIRUS.fa
 
 # align to the virus
-bwa mem -t 30 ${PFX}.viral_mapping/$VIRUS.fa $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=${PFX}.viral_mapping/to_$VIRUS.bam.bai O=${PFX}.viral_mapping/to_$VIRUS.bam
+bwa mem -t 28 ${PFX}.viral_mapping/$VIRUS.fa $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=${PFX}.viral_mapping/to_$VIRUS.bam.bai O=${PFX}.viral_mapping/to_$VIRUS.bam
 ```
 
 Getting reads that map to the virus with one mate:
@@ -175,7 +177,16 @@ samtools idxstats to_$VIRUS.mapped_or_mate.bam | cut -f4
 To explore integration sites, remapping to human+virus database:
 
 ```
-minimap2 -ax sr ../human_plus_viral_genome/human_gdc-viral.fa to_$VIRUS.mapped_or_mate.R1.fq to_$VIRUS.mapped_or_mate.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bam.bai O=to_human_$VIRUS.bam
+cat ${PFX}.viral_mapping/$VIRUS.fa > human_gdc-viral.fa
+cat /g/data3/gx8/local/production/bcbio/genomes/Hsapiens/GRCh37/seq/GRCh37.fa >> human_gdc-viral.fa
+samtools faidx human_gdc-viral.fa
+bwa index human_gdc-viral.fa
+
+minimap2 -ax sr human_gdc-viral.fa to_$VIRUS.mapped_or_mate.R1.fq to_$VIRUS.mapped_or_mate.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bam.bai O=to_human_$VIRUS.bam
+
+# or for all reads:
+minimap2 -ax sr human_gdc-viral.fa $PFX.unmapped_or_mate.all.R1.fq $PFX.unmapped_or_mate.all.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.all.bam.bai O=to_human_$VIRUS.all.bam
+bwa mem -t 28 human_gdc-viral.fa $PFX.unmapped_or_mate.all.R1.fq $PFX.unmapped_or_mate.all.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bwa.bam.bai O=to_human_$VIRUS.bwa.bam
 ```
 
 Exploring in IGV with `/data/cephfs/punim0010/extras/vlad/synced/HGT-ID/resources/human_gdc-viral.fa` reference. Going to the viral contig, groupping reads by chromosome of mate, seeing if many reads have mates mapped on human. Coloring reads by pair orientation to see if and how orientation support the breakpoints.
