@@ -1,0 +1,26 @@
+#E1^E4	Contributes to the replication of the viral plasmid genome as a nuclear plasmid in basalcells. It is a multifunctional protein and contributes to different processes in both the early and late stages of the virus life cycle
+#E1		Inhibits viral DNA replication (ATP-dependent DNA helicase). Replication protein E1 forms a complex with the viral regulatory protein E2. The E1-E2 complex binds to the replication origin which contains binding sites for both proteins
+#E2		Plays a role in the initiation of viral DNA replication. Forms E1-E2 dimer with replication protein E1. The E1-E2 complex binds to the replication origin which contains binding sites for both proteins.
+#E5		Oncoprotein. Contributes to cell transformation. Produces polyploid cells by endoreplication.
+#L2		Forms an icosahedral capsid. Plays an essential role in virus assembly by recruiting viral components to PML bodies, the proposed sites of virus morphogenesis.
+#L1		Forms an icosahedral capsid. Binds to heparan sulfate proteoglycans on cell surface of basal layer keratinocytes to provide initial virion attachment
+#Upstream_regulatory_region: Upstream regulatory region (URR). Contains DNA-protein binding motifs. Involved in replication.
+#E6		Oncoprotein. It has long been recognized as a potent oncogene and is intimately associated with the events that result in the malignant conversion of virally infected cells.
+#E7		Plays a role in viral genome replication by driving entry of quiescent cells into the cell cycle.
+HPV16	0	2756	E1_E4
+HPV16	0	1950	E1
+HPV16	1891	2989	E2
+HPV16	2985	3237	E5
+HPV16	3350	3356	polyA_signal_sequence
+HPV16	3372	4794	L2
+HPV16	4774	6292	L1
+HPV16	6292	7124	Upstream_regulatory_region
+HPV16	6398	6403	polyA_signal_sequence
+HPV16	6588	6600	E2_binding_site
+HPV16	6995	7007	E2_binding_site
+HPV16	7058	7065	TATA_box
+HPV16	7076	7088	E2_binding_site
+HPV16	7091	7103	E2_binding_site
+HPV16	7106	7113	TATA_box
+HPV16	7124	7601	E6
+HPV16	7603	7900	E7
