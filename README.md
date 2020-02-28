@@ -211,6 +211,12 @@ bwa mem -t 28   /g/data/gx8/projects/Saveliev_Viral/ref/human_gdc-viral.fa to_$V
 
 Exploring in IGV with `/data/cephfs/punim0010/extras/vlad/synced/HGT-ID/resources/human_gdc-viral.fa` reference. Going to the viral contig, groupping reads by chromosome of mate, seeing if many reads have mates mapped on human. Coloring reads by pair orientation to see if and how orientation support the breakpoints.
 
+Can view bridging reads with, by sorting based on the chromosome of mate (column 7):
+
+```
+samtools view to_human_HPV18.bwa.bam HPV18 | sort -k7,7 | less
+```
+
 Optional - viral de-novo assembly:
 
 ```
