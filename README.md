@@ -141,52 +141,72 @@ bash check_cov.sh $PFX.viral_mapping/to_gdc.bam
 tsv $PFX.viral_mapping/to_gdc-completeness.txt
 ```
 
-
-### Checking integration
-
-Now exploring viruses with a high rate of brigding pairs (for e.g., HPV17).
+Integtating viruses will be on the top of the list, showing high support from brigding read pairs. At this stage we pick the virus of interest and explore it in detail, e.g.:
 
 ```
 VIRUS=HPV18
+```
 
+
+### Checking integration
+
+Now exploring the specific virus. First, aligning the reads now to this virus specifically:
+
+```
 # get the virus sequence
-samtools faidx human_plus_viral_genome/gdc-viral.fa $VIRUS > ${PFX}.viral_mapping/$VIRUS.fa
+samtools faidx /g/data/gx8/projects/Saveliev_Viral/ref/gdc-viral.fa $VIRUS > ${PFX}.viral_mapping/$VIRUS.fa
 bwa index $PFX.viral_mapping/$VIRUS.fa
 
 # align to the virus
 bwa mem -t 28 ${PFX}.viral_mapping/$VIRUS.fa $PFX.unmapped_or_mate.R1.fq $PFX.unmapped_or_mate.R2.fq | bamsort inputthreads=30 outputthreads=30 inputformat=sam index=1 indexfilename=${PFX}.viral_mapping/to_$VIRUS.bam.bai O=${PFX}.viral_mapping/to_$VIRUS.bam
 ```
 
-Getting reads that map to the virus with one mate:
+Our BAM has reads that map to $VIRUS, reads that map to other viruses (which will show as unmapped here), and read pairs that bridge $VIRUS and human.
+We are interested only in $VIRUS reads and bridging reads, this extracting them using the command we used before:
 
 ```
 cd ${PFX}.viral_mapping
-samtools view to_$VIRUS.bam $VIRUS -o to_$VIRUS.mapped_or_mate.bam
+sambamba view -f bam -F "unmapped or mate_is_unmapped" -t 28 to_$VIRUS.bam | samtools sort -n -@ 28 > to_$VIRUS.unmapped_or_mate.bam
+```
 
+<!-- Let's extract the reads that map to the virus with just one mate, which will be the bridging reads, and see: -->
+
+<!-- ``` -->
+<!-- cd ${PFX}.viral_mapping -->
+<!-- samtools view to_$VIRUS.bam $VIRUS -o to_$VIRUS.mapped_or_mate.bam -->
+
+<!-- samtools sort -n to_$VIRUS.mapped_or_mate.bam -O bam -o to_$VIRUS.mapped_or_mate.namesorted.bam -->
+
+<!-- samtools fastq to_$VIRUS.mapped_or_mate.namesorted.bam -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s to_$VIRUS.mapped_or_mate.single.fq -->
+<!-- ``` -->
+
+Integrating viruses should have a high content of unmapped reads (the last column in `samtools idxstats` HPV18 record), because their mate map to the virus, making the the briding reeds with the human genome:
+
+```
+samtools index to_$VIRUS.mapped_or_mate.bam
+samtools idxstats to_$VIRUS.mapped_or_mate.bam
+```
+
+Now to explore potential integration sites, remapping to human+virus database:
+
+We already prepared the GRCh37 + gdc-viral combined reference which is located here: /g/data/gx8/projects/Saveliev_Viral/ref/human_gdc-viral.fa. It was prepared using the following commands in comments:
+
+```
+# cd /g/data/gx8/projects/Saveliev_Viral/ref/
+# cat /g/data/gx8/local/production/bcbio/genomes/Hsapiens/GRCh37/viral/gdc-viral.fa > human_gdc-viral.fa
+# cat /g/data3/gx8/local/production/bcbio/genomes/Hsapiens/GRCh37/seq/GRCh37.fa >> human_gdc-viral.fa
+# samtools faidx human_gdc-viral.fa
+# bwa index human_gdc-viral.fa
+```
+
+Extracting our $VIRUS+bridging reads and mapping to this combined reference:
+
+```
 samtools sort -n to_$VIRUS.mapped_or_mate.bam -O bam -o to_$VIRUS.mapped_or_mate.namesorted.bam
-
 samtools fastq to_$VIRUS.mapped_or_mate.namesorted.bam -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s to_$VIRUS.mapped_or_mate.single.fq
-```
 
-Integrating viruses should have a high content of unmapped reads (last column in `samtools idxstats` HPV18 record), because those are the unmapped reads have mates mapped to the virus, and thus bridge it with the human genome.
-
-```
-samtools idxstats to_$VIRUS.mapped_or_mate.bam | cut -f4
-```
-
-To explore integration sites, remapping to human+virus database:
-
-```
-cat ${PFX}.viral_mapping/$VIRUS.fa > human_gdc-viral.fa
-cat /g/data3/gx8/local/production/bcbio/genomes/Hsapiens/GRCh37/seq/GRCh37.fa >> human_gdc-viral.fa
-samtools faidx human_gdc-viral.fa
-bwa index human_gdc-viral.fa
-
-minimap2 -ax sr human_gdc-viral.fa to_$VIRUS.mapped_or_mate.R1.fq to_$VIRUS.mapped_or_mate.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bam.bai O=to_human_$VIRUS.bam
-
-# or for all reads:
-minimap2 -ax sr human_gdc-viral.fa $PFX.unmapped_or_mate.all.R1.fq $PFX.unmapped_or_mate.all.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.all.bam.bai O=to_human_$VIRUS.all.bam
-bwa mem -t 28 human_gdc-viral.fa $PFX.unmapped_or_mate.all.R1.fq $PFX.unmapped_or_mate.all.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bwa.bam.bai O=to_human_$VIRUS.bwa.bam
+minimap2 -ax sr /g/data/gx8/projects/Saveliev_Viral/ref/human_gdc-viral.fa to_$VIRUS.mapped_or_mate.R1.fq to_$VIRUS.mapped_or_mate.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.mm2.bam.bai O=to_human_$VIRUS.mm2.bam
+bwa mem -t 28   /g/data/gx8/projects/Saveliev_Viral/ref/human_gdc-viral.fa to_$VIRUS.mapped_or_mate.R1.fq to_$VIRUS.mapped_or_mate.R2.fq | bamsort inputformat=sam index=1 indexfilename=to_human_$VIRUS.bwa.bam.bai O=to_human_$VIRUS.bwa.bam
 ```
 
 Exploring in IGV with `/data/cephfs/punim0010/extras/vlad/synced/HGT-ID/resources/human_gdc-viral.fa` reference. Going to the viral contig, groupping reads by chromosome of mate, seeing if many reads have mates mapped on human. Coloring reads by pair orientation to see if and how orientation support the breakpoints.
@@ -195,8 +215,7 @@ Optional - viral de-novo assembly:
 
 ```
 samtools sort -n to_$VIRUS.mapped_or_mate.bam -O bam -o to_$VIRUS.mapped_or_mate.namesorted.bam
-samtools fastq to_$VIRUS.mapped_or_mate.namesorted.bam -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s 
-to_$VIRUS.mapped_or_mate.single.fq
+samtools fastq to_$VIRUS.mapped_or_mate.namesorted.bam -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s to_$VIRUS.mapped_or_mate.single.fq
 spades.py --only-assembler -1 to_$VIRUS.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq -s to_$VIRUS.mapped_or_mate.single.fq -o spades
 # QC the assembly - stats and alignment back to the virus
 quast.py spades/contigs.fasta -R $VIRUS.fa -o spades/quast --ref-bam to_$VIRUS.mapped_or_mate.namesorted.bam --no-read-stats --no-sv -1 to_HPV18.mapped_or_mate.R1.fq -2 to_$VIRUS.mapped_or_mate.R2.fq --debug
