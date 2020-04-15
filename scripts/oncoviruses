@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+import sys
+import os
+from os.path import dirname, abspath, join, basename, isfile, isdir, splitext
+import click
+from hpc_utils import hpc
+from ngs_utils.call_process import run_simple
+from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir
+from ngs_utils import logger as log
+from ngs_utils.snakemake_utils import run_snakemake
+from ngs_utils.utils import set_locale; set_locale()
+from oncoviruses import package_path
+
+
+@click.command()
+@click.argument('bam', type=click.Path(exists=True))
+@click.option('-o', '--output-dir', 'output_dir', type=click.Path())
+@click.option('--genomes', '--genomes-dir', 'genomes_dir', help='Path to umccrise genomes')
+@click.option('-g', '--genome', 'genome', default='hg38')
+@click.option('-s', '--sample-name' '--prefix', 'sample_name',
+              help='Prefix for output files. Default is the basename of the output file.')
+@click.option('-v', '--virus', 'virus',
+              help='Optional virus species to check for (e.g. hpv16, hpv33, etc.). '
+                   'If not provided, will be detected.')
+
+@click.option('-t', '--threads', '-j', '--jobs', '--cores', 'requested_cores', type=click.INT,
+              help='Maximum number of cores to use at single time (works both for local and cluster runs)')
+@click.option('--unlock', 'unlock', is_flag=True)
+@click.option('-n', '--dryrun', 'dryrun', is_flag=True,
+              help='Propagated to snakemake. Prints rules and commands to be run without actually executing them.')
+
+def main(bam, output_dir, genomes_dir=None, genome=None, sample_name=None, virus=None,
+         requested_cores=None, dryrun=None, unlock=None):
+
+    if not bam.endswith('.bam'):
+        raise click.BadParameter(f'Input must be a BAM file, got: {bam}')
+    if not sample_name:
+        sample_name = splitext(basename(bam))[0]
+
+    output_dir = output_dir or 'oncoviruses'
+    output_dir = safe_mkdir(abspath(output_dir))
+    log_dir = safe_mkdir(join(output_dir, 'log'))
+    log.init(log_fpath_=join(log_dir, 'command.txt'), save_previous=True)
+
+    if isfile(join(output_dir, 'all.done')):
+        run_simple('touch ' + join(output_dir, 'all.done'))
+
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except:
+        cores = 1
+    if requested_cores:
+        cores = min(requested_cores, cores)
+    conf = {
+        'input_bam': abspath(bam),
+        'output_dir': abspath(output_dir),
+        'sample_name': sample_name,
+        'genome': genome,
+        'cores': cores,
+    }
+
+    if virus:
+        conf['virus'] = virus
+
+    # check hpc_utils can find the genomes dir, and error out if not
+    hpc.set_genomes_dir(genomes_dir)
+    conf['genomes_dir'] = verify_dir(hpc.genomes_dir, is_critical=True)
+
+    run_snakemake(join(package_path(), "workflow.smk"), conf, output_dir=output_dir,
+                  jobs=cores, unlock=unlock, dryrun=dryrun, )
+
+
+if __name__ == '__main__':
+    main()

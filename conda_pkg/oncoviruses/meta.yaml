@@ -1,0 +1,43 @@
+{% set data=load_setup_py_data() %}
+
+package:
+  name: {{ data.name }}
+  version: {{ data.version }}
+
+source:
+  path: ../../
+
+build:
+  number: 0
+
+requirements:
+  build:
+    - python >=3.7.3
+    {% for dep in data.install_requires -%}
+    - {{ dep.lower() }}
+    {% endfor %}
+    - samtools
+    - sambamba
+    - bwa
+    - snakemake
+    - ngs_utils
+  run:
+    - python >=3.7.3
+    {% for dep in data.install_requires -%}
+    - {{ dep.lower() }}
+    {% endfor %}
+    - samtools
+    - sambamba
+    - bwa
+    - snakemake
+    - ngs_utils
+
+test:
+  commands:
+    - oncoviruses --help
+
+about:
+  home: "{{ data.url }}"
+  license: "GNU General Public License v3 (GPLv3)"
+  license_family: GPL3
+  summary: "{{ data.description }}"

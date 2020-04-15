@@ -1,0 +1,3 @@
+[submodule "polyidus"]
+	path = polyidus
+	url = git@github.com:vladsaveliev/polyidus.git
