@@ -5,7 +5,7 @@ from os.path import dirname, abspath, join, basename, isfile, isdir, splitext
 import click
 from hpc_utils import hpc
 from ngs_utils.call_process import run_simple
-from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir
+from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir, file_exists, verify_file
 from ngs_utils import logger as log
 from ngs_utils.snakemake_utils import run_snakemake
 from ngs_utils.utils import set_locale; set_locale()
@@ -15,8 +15,16 @@ from oncoviruses import package_path
 @click.command()
 @click.argument('bam', type=click.Path(exists=True))
 @click.option('-o', '--output-dir', 'output_dir', type=click.Path())
-@click.option('--genomes', '--genomes-dir', 'genomes_dir', help='Path to umccrise genomes')
-@click.option('-g', '--genome', 'genome', default='hg38')
+# Reference: either --viruses-fa and (--host-fa or --combined-reference) explicitly, or --genomes and optional -g
+@click.option('--host-fa', 'host_fa', help='Path to host reference (e.g. hg38.fa)')
+@click.option('--viruses-fa', 'viruses_fa',
+              help='Path to viral sequences bwa index prefix (e.g. gdc-viral.fa from bcbio bundle)')
+@click.option('--combined-fa', 'combined_fa',
+              help='To speed up the analysis, you can merge the host and viral fasta '
+                   'and index with `samtools faidx` and `bwa index`')
+@click.option('--genomes', '--genomes-dir', 'genomes_dir',
+              help='Path to umccrise genomes, alternative to all "*-fa" options')
+
 @click.option('-s', '--sample-name' '--prefix', 'sample_name',
               help='Prefix for output files. Default is the basename of the output file.')
 @click.option('-v', '--virus', 'virus',
@@ -29,7 +37,7 @@ from oncoviruses import package_path
 @click.option('-n', '--dryrun', 'dryrun', is_flag=True,
               help='Propagated to snakemake. Prints rules and commands to be run without actually executing them.')
 
-def main(bam, output_dir, genomes_dir=None, genome=None, sample_name=None, virus=None,
+def main(bam, output_dir, host_fa, viruses_fa, combined_fa, genomes_dir=None, sample_name=None, virus=None,
          requested_cores=None, dryrun=None, unlock=None):
 
     if not bam.endswith('.bam'):
@@ -42,8 +50,8 @@ def main(bam, output_dir, genomes_dir=None, genome=None, sample_name=None, virus
     log_dir = safe_mkdir(join(output_dir, 'log'))
     log.init(log_fpath_=join(log_dir, 'command.txt'), save_previous=True)
 
-    if isfile(join(output_dir, 'all.done')):
-        run_simple('touch ' + join(output_dir, 'all.done'))
+    if isfile(join(output_dir, 'work', 'all.done')):
+        run_simple('rm ' + join(output_dir, 'work', 'all.done'))
 
     try:
         cores = len(os.sched_getaffinity(0))
@@ -55,7 +63,6 @@ def main(bam, output_dir, genomes_dir=None, genome=None, sample_name=None, virus
         'input_bam': abspath(bam),
         'output_dir': abspath(output_dir),
         'sample_name': sample_name,
-        'genome': genome,
         'cores': cores,
     }
 
@@ -64,7 +71,25 @@ def main(bam, output_dir, genomes_dir=None, genome=None, sample_name=None, virus
 
     # check hpc_utils can find the genomes dir, and error out if not
     hpc.set_genomes_dir(genomes_dir)
-    conf['genomes_dir'] = verify_dir(hpc.genomes_dir, is_critical=True)
+    if hpc.genomes_dir:
+        conf['genomes_dir'] = hpc.genomes_dir
+    if combined_fa:
+        if not verify_file(combined_fa + '.bwt'):
+            log.critical(f'Please, index {combined_fa} with `bwa index {combined_fa}`')
+        conf['combined_fa'] = combined_fa
+    if viruses_fa:
+        if not verify_file(viruses_fa + '.bwt'):
+            log.critical(f'Please, index {viruses_fa} with `bwa index {viruses_fa}`')
+        if not verify_file(viruses_fa + '.fai'):
+            log.critical(f'Please, index {viruses_fa} with `samtools faidx {viruses_fa}`')
+        conf['viruses_fa'] = verify_file(viruses_fa)
+    if not hpc.genomes_dir:
+        if not viruses_fa:
+            log.critical(f'Please provide either --combined-fa, or both --host-fa and --viruses-fa, or --genomes-dir')
+        if not viruses_fa or (not combined_fa and not host_fa):
+            log.critical(f'Please provide either --viruses-fa and (--combined-fa or --host-fa), or --genomes-dir')
+        if host_fa:
+            conf['host_fa'] = verify_file(host_fa)
 
     run_snakemake(join(package_path(), "workflow.smk"), conf, output_dir=output_dir,
                   jobs=cores, unlock=unlock, dryrun=dryrun, )
@@ -72,3 +97,9 @@ def main(bam, output_dir, genomes_dir=None, genome=None, sample_name=None, virus
 
 if __name__ == '__main__':
     main()
+
+
+
+
+
+

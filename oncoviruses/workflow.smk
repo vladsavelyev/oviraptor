@@ -1,12 +1,14 @@
 import sys
+from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
-import csv
-import yaml
-from ngs_utils.file_utils import which, safe_mkdir
-from ngs_utils.file_utils import get_ungz_gz
-from ngs_utils.file_utils import splitext_plus
+import cyvcf2
+
+from ngs_utils.file_utils import which, safe_mkdir, verify_file
 from ngs_utils.logger import warn
 from hpc_utils import hpc
+from ngs_utils.vcf_utils import add_cyvcf2_hdr
+from ngs_utils.reference_data import get_key_genes_bed
+
 from oncoviruses import package_path
 
 
@@ -15,16 +17,18 @@ from oncoviruses import package_path
 
 INPUT_BAM = config['input_bam']
 OUTPUT_DIR = abspath(config['output_dir'])
+RESULT_PATH = config.get('result_path', join(OUTPUT_DIR, 'breakpoints.vcf.gz'))
+
 SAMPLE = config['sample_name']
 VIRUS = config.get('virus', None)
 if VIRUS:
     VIRUS = VIRUS.upper()
 THREADS = config.get('cores', 10)
 
-GENOME = config.get('genome', 'hg38')
 if config.get('genomes_dir'):
     hpc.set_genomes_dir(config.get('genomes_dir'))
 
+GENOME = 'hg38'
 COMBINED_FA = config.get('combined_fa') or \
     hpc.get_ref_file(genome=GENOME, key='fa_plus_gdc_viruses', must_exist=False)
 HOST_FA = config.get('host_fa') or \
@@ -37,7 +41,9 @@ WORK_DIR = join(OUTPUT_DIR, 'work')
 
 
 rule all:
-    input: join(WORK_DIR, 'all.done')
+    input:
+        RESULT_PATH
+    # input: join(WORK_DIR, 'all.done')
 
 
 rule extract_unmapped_and_mate_unmapped_reads:
@@ -312,92 +318,149 @@ rule filter_manta:
     input:
         vcf = rules.run_manta.output.vcf
     output:
-        vcf = join(OUTPUT_DIR, 'breakpoints_{virus}.vcf.gz')
+        vcf = join(WORK_DIR, 'step9_{virus}_manta_filter/breakpoints.vcf.gz')
     shell:
         "bcftools view {input.vcf} | "
         "grep -P '^#|{wildcards.virus}' | "
         "bcftools filter -i \"IMPRECISE=0\" -Oz -o {output.vcf}"
 
+rule snpeff:
+    input:
+        vcf = rules.filter_manta.output.vcf,
+    output:
+        vcf = join(WORK_DIR, 'step10_{virus}_snpeff/breakpoints.eff.vcf.gz')
+    params:
+        genome = GENOME,
+        tmp_dir = join(WORK_DIR, 'step10_{virus}_snpeff', 'tmp'),
+        csv  = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.csv'),
+        html = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.html'),
+    resources:
+        mem_mb = 2000
+    run:
+        safe_mkdir(params.tmp_dir)
+        snpeff_db = hpc.get_ref_file(genome=params.genome, key='snpeff')
+        snpeff_db_dir = dirname(snpeff_db)
+        assert params.genome == 'hg38', 'Only hg38 is suported for snpEff'
+        snpeff_db_name = 'GRCh38.86'  # for some reason it doesn't matter if the subdir is named GRCh38.92
 
-# rule bwa_bridging_reads_to_genome:
-#     input:
-#         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
-#         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
-#     output:
-#         human_bam_namesorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.namesorted.bam')
-#     params:
-#         human_bwa_prefix = join(hpc.get_ref_file(genome=GENOME, key='bwa'), f'{GENOME}.fa')
-#     threads: THREADS
-#     shell:
-#         # using the polyidus bwa command.
-#         # -T1 = minimum score to output [default 30]
-#         # -a  = output all alignments for SE or unpaired PE
-#         # -C  = append FASTA/FASTQ comment to SAM output
-#         # -Y  = use soft clipping for supplementary alignments
-#         "bwa mem -T10 -t{threads} -a -C -Y {params.human_bwa_prefix} {input.fq1} {input.fq2}"
-#         " | samtools sort -n -@{threads} -Obam -o {output.human_bam_namesorted}"
-#
-# rule bwa_bridging_reads_to_genome_index:
-#     input:
-#          human_bam_namesorted = rules.bwa_bridging_reads_to_genome.output.human_bam_namesorted,
-#     output:
-#          human_bam_possorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.possorted.bam'),
-#          human_bai_possorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.possorted.bam.bai'),
-#     threads: THREADS
-#     shell:
-#          'samtools sort {input.human_bam_namesorted} -@{threads} -Obam -o {output.human_bam_possorted}'
-#          ' && samtools index {output.human_bam_possorted}'
-#
-# rule find_approximate_integrations:
-#     input:
-#         human_bam_namesorted = rules.bwa_bridging_reads_to_genome.output.human_bam_namesorted,
-#         virus_bam_namesorted = rules.namesort_viral_bridging_bam.output.virus_bam_namesorted,
-#     output:
-#         integrations_tsv = join(OUTPUT_DIR, '{virus}_approx_integration_info.tsv')
-#     shell:
-#         'polyidus_find_approx_integrations.py {input.human_bam_namesorted} {input.virus_bam_namesorted} '
-#         '-v {wildcards.virus} > {output.integrations_tsv}'
-#
-# rule find_exact_integrations:
-#     input:
-#         human_bam_possorted = rules.bwa_bridging_reads_to_genome_index.output.human_bam_possorted,
-#         virus_bam_namesorted = rules.namesort_viral_bridging_bam.output.virus_bam_namesorted,
-#         approx_integrations = rules.find_approximate_integrations.output.integrations_tsv,
-#     output:
-#         integrations_tsv = join(OUTPUT_DIR, '{virus}_exact_integrations.tsv')
-#     shell:
-#         'polyidus_find_exact_integrations.py {input.human_bam_possorted} {input.virus_bam_namesorted} '
-#         '{input.approx_integrations} -v {wildcards.virus} > {output.integrations_tsv}'
-#
-# def aggregate_viruses_input_fn(wildcards):
-#     if not VIRUS:
-#         # # calling just to wait for the execution of the checkpoint rule:
-#         # virus_fas_dir = checkpoints.select_viruses.get(**wildcards).output.virus_fas_dir
-#         # # this function will check files existing with this name pattern, and get all wildcards matching these files
-#         # virus = glob_wildcards(join(WORK_DIR, 'viral_fa', '{virus}.fa')).virus
-#         selected_viruses_tsv = checkpoints.select_viruses.get(**wildcards).output.selected_viruses_tsv
-#         viruses = [v.strip() for v in open(selected_viruses_tsv).readlines() if v.strip()]
-#     else:
-#         viruses = [VIRUS]
-#
-#     return expand(rules.find_exact_integrations.output.integrations_tsv, virus=viruses)
+        jvm_opts = f'-Xms750m -Xmx4g'
+        java_args = f'-Djava.io.tmpdir={params.tmp_dir}'
 
-def aggregate_viruses_input_fn(wildcards):
+        shell('snpEff {jvm_opts} {java_args} '
+              '-dataDir {snpeff_db_dir} {snpeff_db_name} '
+              '-hgvs -cancer -i vcf -o vcf '
+              '-csvStats {params.csv} -s {params.html} '
+              '{input.vcf} '
+              '| bgzip -c > {output.vcf} && tabix -p vcf {output.vcf}')
+        verify_file(output.vcf, is_critical=True)
+
+# bcftools doesn't work with 4th columns in bed
+# vcfanno doesn't work when mulitple genes overlaping one variant
+# so using bedtools intersect plus a cyvcf2 loop
+rule annotate_with_viral_genes:
+    input:
+        vcf = rules.snpeff.output.vcf,
+    output:
+        vcf = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.eff.viral_genes.vcf.gz'),
+    params:
+        overlap_tsv = join(WORK_DIR, 'step10_{virus}_viral_genes/overlap.tsv')
+    run:
+        genes_bed = join(package_path(), 'data', f'{wildcards.virus}.bed')
+        if not isfile(genes_bed):
+            warn(f'No genes data for virus {wildcards.virus}, skipping annotation')
+            shell('cp {input.vcf} {output.vcf}')
+        else:
+            shell('bedtools intersect -a {input.vcf} -b {genes_bed} -loj > {params.overlap_tsv}')
+
+            gene_by_id = defaultdict(list)
+            with open(params.overlap_tsv) as f:
+                for l in f:
+                    _, _, var_id, _, _, _, _, _, _, _, _, gene = l.strip().split('\t')
+                    gene_by_id[var_id].append(gene)
+
+            vcf = cyvcf2.VCF(input.vcf)
+            add_cyvcf2_hdr(vcf, 'ViralGenes', '.', 'String',
+                           'Viral genes that this breakpoint overlaps (and likely disrupts)')
+            w = cyvcf2.Writer(output.vcf, vcf)
+            w.write_header()
+            for rec in vcf:
+                genes = [g for g in gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), []) if g != '.']
+                if genes:
+                    rec.INFO['ViralGenes'] = ','.join(genes)
+                w.write_record(rec)
+        shell('tabix -p vcf {output.vcf}')
+
+rule annotate_with_host_genes:
+    input:
+        vcf = rules.annotate_with_viral_genes.output.vcf,
+        key_genes_bed = get_key_genes_bed(GENOME),
+        # coding_regions_bed = hpc.get_ref_file(GENOME, key='coding_regions'),
+        fai = COMBINED_FA + '.fai',
+    output:
+        vcf = join(WORK_DIR, 'step11_{virus}_host_genes/breakpoints.eff.genes.host_cancer_genes.vcf.gz'),
+    params:
+        overlap_tsv = join(WORK_DIR, 'step11_{virus}_host_genes/overlap.tsv')
+    run:
+        # -D b Report the closest feature in B, and its distance to A as an extra column. Use negative distances
+        #      to report upstream features. -Db means report distance with respect to B: When B is on the - strand,
+        #      “upstream” means A has a higher (start,stop).
+        shell('bedtools closest -D b -a {input.vcf} -b {input.key_genes_bed} -g {input.fai}'
+              ' > {params.overlap_tsv}')
+        gene_by_id = defaultdict(list)
+        with open(params.overlap_tsv) as f:
+            for l in f:
+                try:
+                    _, _, var_id, _, _, _, _, _, _, _, _, gene, _, strand, distance = l.strip().split('\t')
+                    distance = int(distance)
+                except:
+                    pass
+                else:
+                    # Reporting either overlaps (distance ~ 0), or upstream events that might
+                    # affect gene expression:
+                    if distance < 50 or strand == '+' and distance < 0 or strand == '-' and distance > 0:
+                        gene_by_id[var_id].append(gene)
+
+        vcf = cyvcf2.VCF(input.vcf)
+        add_cyvcf2_hdr(vcf, 'NearestCancerGenes', '.', 'String', 'Nearest cancer gene to the breakpoint')
+        w = cyvcf2.Writer(output.vcf, vcf)
+        w.write_header()
+        for rec in vcf:
+            genes = [g for g in gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), []) if g != '.']
+            if genes:
+                rec.INFO['NearestCancerGenes'] = ','.join(genes)
+            w.write_record(rec)
+
+last_vcf_rule = rules.annotate_with_host_genes
+
+# rule tabix_result_vcf:
+#     input:
+#         vcf = rules.annotate_with_host_genes.output.vcf
+#     output:
+#         tbi = rules.annotate_with_host_genes.output.vcf + '.tbi'
+#     shell:
+#         'tabix -p vcf {input}'
+
+def merge_viruses_input_fn(wildcards):
     if not VIRUS:
         selected_viruses_tsv = checkpoints.select_viruses.get(**wildcards).output.selected_viruses_tsv
         viruses = [v.strip() for v in open(selected_viruses_tsv).readlines() if v.strip()]
     else:
         viruses = [VIRUS]
-    return expand(rules.filter_manta.output.vcf, virus=viruses)
+    return expand(last_vcf_rule.output[0], virus=viruses)
 
-rule aggregate_over_viruses:
+rule merged_viruses:
     input:
-        aggregate_viruses_input_fn
-        # rules.filter_manta.output.vcf
+        merge_viruses_input_fn
     output:
-        join(WORK_DIR, 'all.done')
-    shell:
-        'touch {output}'
+        RESULT_PATH
+        # join(WORK_DIR, 'all.done')
+    run:
+        if len(input) > 1:
+            shell('bcftools merge {input} -Oz -o {output}')
+        else:
+            shell('cp {input} {output}')
+        shell('tabix -p vcf {output}')
+        # 'touch {output}'
 
 
 
