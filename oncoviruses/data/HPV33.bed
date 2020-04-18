@@ -1,0 +1,23 @@
+#E6, E7: transforming proteins
+#E1: replication protein
+#E2: regulatory protein
+#L1, L2: minor capsid protein
+HPV33   7   10  TATA_box
+HPV33   39  50  protein_bind_E2_transcription
+HPV33   54  65  protein_bind_E2_transcription
+HPV33   71  75  TATA_box
+HPV33   109 558 E6
+HPV33   573 866 E7
+HPV33   879 2813    E1
+HPV33   2749    3810  E2
+HPV33   3326    3577  E4
+HPV33   3854    4081  E5
+HPV33   4210    5613  L2
+HPV33   5594    7093  L1
+HPV33   7098    7323    repeat_region
+HPV33   7502    7513    protein_bind_E2_transcription
+HPV33   7517    7574    repeat_region
+HPV33   7520    7530    Z_DNA_structure
+HPV33   7599    7609    Z_DNA_structure
+HPV33   7891    7894    TATA_box
+HPV33   7901    7904    TATA_box
