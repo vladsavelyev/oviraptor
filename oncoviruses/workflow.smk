@@ -25,11 +25,19 @@ GENOME = config.get('genome', 'hg38')
 if config.get('genomes_dir'):
     hpc.set_genomes_dir(config.get('genomes_dir'))
 
+COMBINED_FA = config.get('combined_fa') or \
+    hpc.get_ref_file(genome=GENOME, key='fa_plus_gdc_viruses', must_exist=False)
+HOST_FA = config.get('host_fa') or \
+    hpc.get_ref_file(genome=GENOME, key='fa', must_exist=False)
+VIRUSES_FA = config.get('viruses_fa') or \
+    hpc.get_ref_file(key='gdc_viral_fa', must_exist=False)
+assert VIRUSES_FA and (COMBINED_FA or HOST_FA)
+
 WORK_DIR = join(OUTPUT_DIR, 'work')
 
 
 rule all:
-    input: 'all.done'
+    input: join(WORK_DIR, 'all.done')
 
 
 rule extract_unmapped_and_mate_unmapped_reads:
@@ -37,10 +45,10 @@ rule extract_unmapped_and_mate_unmapped_reads:
         host_bam = INPUT_BAM
     output:
         host_bam_namesorted = join(WORK_DIR, f'step1_host_unmapped_or_mate_unmapped.namesorted.bam')
-    threads: THREADS
+    threads: min(10, THREADS)
     shell:
-         "sambamba view -t{threads} -fbam -F 'unmapped or mate_is_unmapped' "
-         "{input.host_bam} | samtools sort -n -@{threads} -Obam -o {output.host_bam_namesorted}"
+         "sambamba view -t{threads} -fbam -F 'unmapped or mate_is_unmapped' {input.host_bam}"
+         " | samtools sort -n -@{threads} -Obam -o {output.host_bam_namesorted}"
 
 
 rule unmapped_and_mate_unmapped_reads_to_fastq:
@@ -49,7 +57,7 @@ rule unmapped_and_mate_unmapped_reads_to_fastq:
     output:
         fq1 = join(WORK_DIR, f'step2_host_unmapped_or_mate_unmapped.R1.fq'),
         fq2 = join(WORK_DIR, f'step2_host_unmapped_or_mate_unmapped.R2.fq'),
-    threads: THREADS
+    threads: max(10, THREADS)
     shell:
         "samtools fastq -@{threads} {input.host_bam_namesorted} -1 {output.fq1} -2 {output.fq2}"
 
@@ -60,7 +68,7 @@ if not VIRUS:
         input:
             fq1 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq1,
             fq2 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq2,
-            gdc_fa = join(hpc.get_ref_file(key='viral'), 'gdc-viral.fa'),
+            gdc_fa = VIRUSES_FA,
         output:
             gdc_bam = join(WORK_DIR, 'detect_viral_reference', 'host_unmapped_or_mate_unmapped_to_gdc.bam')
         threads: THREADS
@@ -82,14 +90,14 @@ if not VIRUS:
         input:
             bam = rules.bwa_unmapped_and_mate_unmapped_reads_to_gdc.output.gdc_bam,
             bai = rules.bwa_unmapped_and_mate_unmapped_reads_to_gdc.output.gdc_bam + '.bai',
-            fai = join(hpc.get_ref_file(key='viral'), 'gdc-viral.fa.fai'),
+            fai = VIRUSES_FA + '.fai',
         output:
             mosdepth_regions_bed_gz = mosdepth_prefix + '.regions.bed.gz',
             mosdepth_thresholds_bed_gz = mosdepth_prefix + '.thresholds.bed.gz',
         params:
             work_dir = mosdepth_work_dir,
             prefix = mosdepth_prefix,
-        threads: 20
+        threads: THREADS
         run:
             awk_cmd = "awk 'BEGIN {{FS=\"\\t\"}}; {{print $1 FS \"0\" FS $2}}'"
             mosdepth_cmd = (
@@ -127,7 +135,7 @@ if not VIRUS:
     checkpoint select_viruses:
         input:
             tsv = rules.prioritize_viruses.output.oncoviruses_tsv,
-            gdc_fa = join(hpc.get_ref_file(key='viral'), 'gdc-viral.fa'),
+            gdc_fa = VIRUSES_FA,
         output:
             selected_viruses_tsv = join(WORK_DIR, 'detect_viral_reference', 'integrated_viruses.tsv'),
             # virus_fas_dir = directory(join(WORK_DIR, 'viral_fa')),
@@ -153,11 +161,12 @@ if not VIRUS:
                         out.write(v + '\n')
                     # shell(f"samtools faidx {input.gdc_fa} {v} > {join(output.virus_fas_dir, f'{v}.fa')}")
 
-rule create_viral_genome:
+rule create_viral_reference:
     input:
-        gdc_fa = join(hpc.get_ref_file(key='viral'), 'gdc-viral.fa'),
+        gdc_fa = VIRUSES_FA,
     output:
-        virus_fa = join(WORK_DIR, '{virus}', '{virus}.fa')
+        virus_fa = join(WORK_DIR, '{virus}', '{virus}.fa'),
+        virus_bwt = join(WORK_DIR, '{virus}', '{virus}.fa.bwt'),  # one of bwa index files
     # params:
     #     virus =
         # selected_viruses_tsv = join(WORK_DIR, 'integrated_viruses.tsv'),
@@ -165,52 +174,49 @@ rule create_viral_genome:
         # if isfile(params.selected_viruses_tsv):
         #     viruses = open(params.selected_viruses_tsv).readlines()
         "samtools faidx {input.gdc_fa} {wildcards.virus} > {output.virus_fa}"
-
-rule index_viral_genome:
-    input:
-        virus_fa = join(WORK_DIR, '{virus}', '{virus}.fa')
-    output:
-        virus_amb = join(WORK_DIR, '{virus}', '{virus}.fa.amb')  # one of bwa index files
-    shell:
-        "bwa index {input.virus_fa}"
+        " && bwa index {output.virus_fa}"
 
 # aligning to specific viral sequence
-rule bwa_unmapped_and_mate_unmapped_reads_to_combined_reference:
+rule bwa_unmapped_and_mateunmapped_to_viral_ref:
     input:
         fq1 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq1,
         fq2 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq2,
-        virus_bwa_prefix = join(WORK_DIR, '{virus}', '{virus}.fa'),
-         # doesn't use this file explicitly, we just need it to trigger index_viral_genome:
-        virus_amb = join(WORK_DIR, '{virus}', '{virus}.fa.amb'),
+        virus_bwa_prefix = rules.create_viral_reference.output.virus_fa,
     output:
-        virus_bam_possorted = join(WORK_DIR, {virus}, 'host_unmapped_and_bridging_reads_to_{virus}.possorted.bam')
+        virus_bam_possorted = join(WORK_DIR, 'step3_host_unmapped_and_bridging_reads_to_{virus}.possorted.bam')
     threads: THREADS
     shell:
         # using the polyidus bwa command.
         # -T1 = minimum score to output [default 30]
         # -a  = output all alignments for SE or unpaired PE
-        # -C  = append FASTA/FASTQ comment to SAM output
         # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -T10 -t{threads} -a -C -Y {input.virus_bwa_prefix} {input.fq1} {input.fq2}"
+        "bwa mem -a -Y -t{threads} {input.virus_bwa_prefix} {input.fq1} {input.fq2}"
         " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
+
+
+# Extracts reads with at least 50 softclipped base stretches.
+# E.g. 50 bases are represented in CIGAR with 50S. So we should look for
+# any 3 digit numbers, or 2 digit numbers starting with 5..9:
+sambamba_softclip_expr = '(cigar =~ /\d{3,}S/ or cigar =~ /[56789]\dS/) and not supplementary'
 
 # Removing reads that are not helpful: fully unmapped pairs. In other words, keeping
 # mapped pairs and pairs with an unmapped mate that can bridge us to the host genome
 rule extract_viral_and_bridging_reads:
     input:
-        virus_bam_possorted = rules.bwa_unmapped_and_mate_unmapped_reads_to_virus.output.virus_bam_possorted,
+        virus_bam_possorted = rules.bwa_unmapped_and_mateunmapped_to_viral_ref.output.virus_bam_possorted,
     output:
-        virus_bam_possorted = join(WORK_DIR, 'bridging_reads_to_{virus}.possorted.bam')
-    threads: THREADS
+        virus_bam_possorted = join(WORK_DIR, 'step4_host_unmapped_and_bridging_reads_to_{virus}.only_bridging_reads.possorted.bam')
+    threads: max(10, THREADS)
     shell:
-         "sambamba view -t{threads} -fbam -F 'not unmapped or not mate_is_unmapped' {input.virus_bam_possorted}"
+         "sambamba view -t{threads} -fbam -F 'not unmapped or not mate_is_unmapped or {sambamba_softclip_expr}'"
+         " {input.virus_bam_possorted}"
          " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
 
 rule namesort_viral_bridging_bam:
     input:
         virus_bam_possorted = rules.extract_viral_and_bridging_reads.output.virus_bam_possorted,
     output:
-        virus_bam_namesorted = join(WORK_DIR, 'bridging_reads_to_{virus}.namesorted.bam')
+        virus_bam_namesorted = join(WORK_DIR, 'step5_host_unmapped_and_bridging_reads_to_{virus}.only_bridging_reads.namesorted.bam')
     threads: THREADS
     shell:
         "samtools sort -n -@{threads} {input.virus_bam_possorted} -Obam -o {output.virus_bam_namesorted}"
@@ -220,85 +226,178 @@ rule viral_bridging_reads_to_fastq:
     input:
         virus_bam_namesorted = rules.namesort_viral_bridging_bam.output.virus_bam_namesorted,
     output:
-        fq1 = join(WORK_DIR, '{virus}_bridging.R1.fq'),
-        fq2 = join(WORK_DIR, '{virus}_bridging.R2.fq'),
-    threads: THREADS
+        fq1 = join(WORK_DIR, 'step6_{virus}_bridging.R1.fq'),
+        fq2 = join(WORK_DIR, 'step6_{virus}_bridging.R2.fq'),
+    threads: max(10, THREADS)
     shell:
         "samtools fastq -@{threads} {input.virus_bam_namesorted} -1 {output.fq1} -2 {output.fq2}"
 
-rule bwa_bridging_reads_to_genome:
+rule create_combined_reference:
+    input:
+        host_fa = HOST_FA,
+        viruses_fa = VIRUSES_FA,
+    output:
+        combined_fa = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
+        combined_bwt = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa.bwt'),
+    shell:
+        "cat {input.host_fa} {input.viruses_fa} > {output.combined_fa} && "
+        "samtools faidx {output.combined_fa} && "
+        "bwa index {output.combined_fa}"
+
+# aligning to specific viral sequence
+rule bwa_viral_bridging_to_comb_ref:
     input:
         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
+        bwa_prefix = COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa,
     output:
-        human_bam_namesorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.namesorted.bam')
-    params:
-        human_bwa_prefix = join(hpc.get_ref_file(genome=GENOME, key='bwa'), f'{GENOME}.fa')
+        comb_bam_possorted = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam')
     threads: THREADS
     shell:
         # using the polyidus bwa command.
         # -T1 = minimum score to output [default 30]
         # -a  = output all alignments for SE or unpaired PE
-        # -C  = append FASTA/FASTQ comment to SAM output
         # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -T10 -t{threads} -a -C -Y {params.human_bwa_prefix} {input.fq1} {input.fq2}"
-        " | samtools sort -n -@{threads} -Obam -o {output.human_bam_namesorted}"
+        "bwa mem -a -Y -t{threads} {input.bwa_prefix} {input.fq1} {input.fq2}"
+        " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}"
 
-rule bwa_bridging_reads_to_genome_index:
-    input:
-         human_bam_namesorted = rules.bwa_bridging_reads_to_genome.output.human_bam_namesorted,
-    output:
-         human_bam_possorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.possorted.bam'),
-         human_bai_possorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.possorted.bam.bai'),
-    threads: THREADS
-    shell:
-         'samtools sort {input.human_bam_namesorted} -@{threads} -Obam -o {output.human_bam_possorted}'
-         ' && samtools index {output.human_bam_possorted}'
+# # Removing reads that are not helpful: fully unmapped pairs. In other words, keeping
+# # mapped pairs and pairs with an unmapped mate that can bridge us to the host genome
+# rule extract_viral_and_bridging_reads:
+#     input:
+#         comb_bam_possorted = rules.bwa_viral_bridging_reads_to_comb_ref.output.comb_bam_possorted,
+#     output:
+#         comb_bam_possorted = join(WORK_DIR, 'step4_comb_ref_mapped_and_bridging.possorted.bam')
+#     threads: THREADS
+#     shell:
+#          "sambamba view -t{threads} -fbam -F 'not unmapped or not mate_is_unmapped' {input.comb_bam_possorted}"
+#          " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}"
 
-rule find_approximate_integrations:
+rule index_comb_ref_bam:
     input:
-        human_bam_namesorted = rules.bwa_bridging_reads_to_genome.output.human_bam_namesorted,
-        virus_bam_namesorted = rules.namesort_viral_bridging_bam.output.virus_bam_namesorted,
+        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted
     output:
-        integrations_tsv = join(OUTPUT_DIR, '{virus}_approx_integration_info.tsv')
+        bai = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted + '.bai'
     shell:
-        'polyidus_find_approx_integrations.py {input.human_bam_namesorted} {input.virus_bam_namesorted} '
-        '-v {wildcards.virus} > {output.integrations_tsv}'
+        "samtools index {input.bam}"
 
-rule find_exact_integrations:
+rule prep_manta:
     input:
-        human_bam_possorted = rules.bwa_bridging_reads_to_genome_index.output.human_bam_possorted,
-        virus_bam_namesorted = rules.namesort_viral_bridging_bam.output.virus_bam_namesorted,
-        approx_integrations = rules.find_approximate_integrations.output.integrations_tsv,
+        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
+        bai = rules.index_comb_ref_bam.output.bai,
+        ref = COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa,
     output:
-        integrations_tsv = join(OUTPUT_DIR, '{virus}_exact_integrations.tsv')
+        run_script = join(WORK_DIR, 'step8_{virus}_manta/runWorkflow.py'),
+    params:
+        manta_dir = join(WORK_DIR, 'step8_{virus}_manta')
+    group: 'manta'
     shell:
-        'polyidus_find_exact_integrations.py {input.human_bam_possorted} {input.virus_bam_namesorted} '
-        '{input.approx_integrations} -v {wildcards.virus} > {output.integrations_tsv}'
+        "configManta.py "
+        "--bam={input.bam} "
+        "--referenceFasta={input.ref} "
+        "--exome "
+        "--runDir={params.manta_dir}"
+
+rule run_manta:
+    input:
+        run_script = rules.prep_manta.output.run_script,
+    output:
+        vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
+    threads: max(10, THREADS)
+    group: 'manta'
+    shell:
+        "{input.run_script} -m local"
+
+rule filter_manta:
+    input:
+        vcf = rules.run_manta.output.vcf
+    output:
+        vcf = join(OUTPUT_DIR, 'breakpoints_{virus}.vcf.gz')
+    shell:
+        "bcftools view {input.vcf} | "
+        "grep -P '^#|{wildcards.virus}' | "
+        "bcftools filter -i \"IMPRECISE=0\" -Oz -o {output.vcf}"
+
+
+# rule bwa_bridging_reads_to_genome:
+#     input:
+#         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
+#         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
+#     output:
+#         human_bam_namesorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.namesorted.bam')
+#     params:
+#         human_bwa_prefix = join(hpc.get_ref_file(genome=GENOME, key='bwa'), f'{GENOME}.fa')
+#     threads: THREADS
+#     shell:
+#         # using the polyidus bwa command.
+#         # -T1 = minimum score to output [default 30]
+#         # -a  = output all alignments for SE or unpaired PE
+#         # -C  = append FASTA/FASTQ comment to SAM output
+#         # -Y  = use soft clipping for supplementary alignments
+#         "bwa mem -T10 -t{threads} -a -C -Y {params.human_bwa_prefix} {input.fq1} {input.fq2}"
+#         " | samtools sort -n -@{threads} -Obam -o {output.human_bam_namesorted}"
+#
+# rule bwa_bridging_reads_to_genome_index:
+#     input:
+#          human_bam_namesorted = rules.bwa_bridging_reads_to_genome.output.human_bam_namesorted,
+#     output:
+#          human_bam_possorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.possorted.bam'),
+#          human_bai_possorted = join(WORK_DIR, '{virus}_bridging_reads_to_host.possorted.bam.bai'),
+#     threads: THREADS
+#     shell:
+#          'samtools sort {input.human_bam_namesorted} -@{threads} -Obam -o {output.human_bam_possorted}'
+#          ' && samtools index {output.human_bam_possorted}'
+#
+# rule find_approximate_integrations:
+#     input:
+#         human_bam_namesorted = rules.bwa_bridging_reads_to_genome.output.human_bam_namesorted,
+#         virus_bam_namesorted = rules.namesort_viral_bridging_bam.output.virus_bam_namesorted,
+#     output:
+#         integrations_tsv = join(OUTPUT_DIR, '{virus}_approx_integration_info.tsv')
+#     shell:
+#         'polyidus_find_approx_integrations.py {input.human_bam_namesorted} {input.virus_bam_namesorted} '
+#         '-v {wildcards.virus} > {output.integrations_tsv}'
+#
+# rule find_exact_integrations:
+#     input:
+#         human_bam_possorted = rules.bwa_bridging_reads_to_genome_index.output.human_bam_possorted,
+#         virus_bam_namesorted = rules.namesort_viral_bridging_bam.output.virus_bam_namesorted,
+#         approx_integrations = rules.find_approximate_integrations.output.integrations_tsv,
+#     output:
+#         integrations_tsv = join(OUTPUT_DIR, '{virus}_exact_integrations.tsv')
+#     shell:
+#         'polyidus_find_exact_integrations.py {input.human_bam_possorted} {input.virus_bam_namesorted} '
+#         '{input.approx_integrations} -v {wildcards.virus} > {output.integrations_tsv}'
+#
+# def aggregate_viruses_input_fn(wildcards):
+#     if not VIRUS:
+#         # # calling just to wait for the execution of the checkpoint rule:
+#         # virus_fas_dir = checkpoints.select_viruses.get(**wildcards).output.virus_fas_dir
+#         # # this function will check files existing with this name pattern, and get all wildcards matching these files
+#         # virus = glob_wildcards(join(WORK_DIR, 'viral_fa', '{virus}.fa')).virus
+#         selected_viruses_tsv = checkpoints.select_viruses.get(**wildcards).output.selected_viruses_tsv
+#         viruses = [v.strip() for v in open(selected_viruses_tsv).readlines() if v.strip()]
+#     else:
+#         viruses = [VIRUS]
+#
+#     return expand(rules.find_exact_integrations.output.integrations_tsv, virus=viruses)
 
 def aggregate_viruses_input_fn(wildcards):
     if not VIRUS:
-        # # calling just to wait for the execution of the checkpoint rule:
-        # virus_fas_dir = checkpoints.select_viruses.get(**wildcards).output.virus_fas_dir
-        # # this function will check files existing with this name pattern, and get all wildcards matching these files
-        # virus = glob_wildcards(join(WORK_DIR, 'viral_fa', '{virus}.fa')).virus
         selected_viruses_tsv = checkpoints.select_viruses.get(**wildcards).output.selected_viruses_tsv
         viruses = [v.strip() for v in open(selected_viruses_tsv).readlines() if v.strip()]
     else:
         viruses = [VIRUS]
-
-    return expand(rules.find_exact_integrations.output.integrations_tsv, virus=viruses)
+    return expand(rules.filter_manta.output.vcf, virus=viruses)
 
 rule aggregate_over_viruses:
     input:
         aggregate_viruses_input_fn
+        # rules.filter_manta.output.vcf
     output:
-        'all.done'
+        join(WORK_DIR, 'all.done')
     shell:
         'touch {output}'
-
-
-
 
 
 
