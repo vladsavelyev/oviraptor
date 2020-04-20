@@ -19,14 +19,12 @@ setup(
     long_description_content_type="text/markdown",
     url='https://github.com/umccr/' + pkg,
     license='GPLv3',
-    packages=[pkg, 'polyidus'],
+    packages=[pkg],
     include_package_data=True,
     zip_safe=False,
     install_requires=versionpy.get_reqs(),
     scripts=[
         join('scripts', 'oncoviruses'),
-        join('scripts', 'polyidus_find_exact_integrations.py'),
-        join('scripts', 'polyidus_find_approx_integrations.py'),
         # legacy:
         join('scripts', 'filter_bam_bridging_reads.py'),
         join('scripts', 'filter_bam_good_reads.py'),
