@@ -1,2 +1,8 @@
 .DS_Store
 test_data/
+*.pyc
+*.egg-info/
+.snakemake
+__pycache__
+dist/
+build/
