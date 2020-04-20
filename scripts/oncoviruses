@@ -91,8 +91,23 @@ def main(bam, output_dir, host_fa, viruses_fa, combined_fa, genomes_dir=None, sa
         if host_fa:
             conf['host_fa'] = verify_file(host_fa)
 
+    # Checking that configManta.py and python2 is available, or if running in umccrise envirnoment so _python2 env is there
+    py2_env_path = hpc.secondary_conda_env('python2')
+    conf['py2_env_path'] = py2_env_path
+
     run_snakemake(join(package_path(), "workflow.smk"), conf, output_dir=output_dir,
-                  jobs=cores, unlock=unlock, dryrun=dryrun, )
+                  jobs=cores, unlock=unlock, dryrun=dryrun)
+
+    result_path = join(output_dir, 'breakpoints.vcf.gz')
+    prio_tsv = join(output_dir, 'prioritized_oncoviruses.tsv')
+    if not verify_file(result_path, silent=True):
+        log.warn(
+            f'Not found any viruses with significant coverage. '
+            f'You can explore the full list at {prio_tsv} and rerun with '
+            f'the --virus option explicitly.')
+    else:
+        log.info(f'Breakpoints reported in {result_path}, '
+                 f'prioritized viruses reported in {prio_tsv}')
 
 
 if __name__ == '__main__':

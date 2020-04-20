@@ -13,7 +13,16 @@ git clone --recursive git@github.com:umccr/oncoviruses.git
 pip install -e oncoviruses
 ```
 
-Installing conda is optional if you have the following tools installed and available in $PATH: python3, bwa, samtools, sambamba, snakemake
+Installing conda is optional if you have the following tools installed and available in $PATH:
+
+- `python3`
+- `bwa`
+- `samtools`
+- `sambamba`
+- `bcftools`
+- `snakemake`
+- `mosdepth` (on macOS, you can pull this docker image instead: `docker pull quay.io/biocontainers/mosdepth:0.2.9--hbeb723e_0`
+- `python2` and Manta's `configManta.py` (you can install it in a separate environment as python2 clashes with python3, but make sure they both envs are appended to $PATH
 
 Usage:
 

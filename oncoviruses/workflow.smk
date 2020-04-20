@@ -17,7 +17,9 @@ from oncoviruses import package_path
 
 INPUT_BAM = config['input_bam']
 OUTPUT_DIR = abspath(config['output_dir'])
-RESULT_PATH = config.get('result_path', join(OUTPUT_DIR, 'breakpoints.vcf.gz'))
+RESULT_PATH = join(OUTPUT_DIR, 'breakpoints.vcf.gz')
+PRIO_TSV = join(OUTPUT_DIR, 'prioritized_oncoviruses.tsv')
+
 
 SAMPLE = config['sample_name']
 VIRUS = config.get('virus', None)
@@ -38,6 +40,13 @@ VIRUSES_FA = config.get('viruses_fa') or \
 assert VIRUSES_FA and (COMBINED_FA or HOST_FA)
 
 WORK_DIR = join(OUTPUT_DIR, 'work')
+
+SV_CALLER = 'manta'
+
+PY2_ENV_PATH = config.get('py2_env_path')
+py2_conda_cmd = ''
+if PY2_ENV_PATH:
+    py2_conda_cmd = 'export PATH=' + PY2_ENV_PATH + '/bin:$PATH; '
 
 
 rule all:
@@ -63,9 +72,10 @@ rule unmapped_and_mate_unmapped_reads_to_fastq:
     output:
         fq1 = join(WORK_DIR, f'step2_host_unmapped_or_mate_unmapped.R1.fq'),
         fq2 = join(WORK_DIR, f'step2_host_unmapped_or_mate_unmapped.R2.fq'),
+        single = join(WORK_DIR, f'step2_host_unmapped_or_mate_unmapped.single.fq'),
     threads: max(10, THREADS)
     shell:
-        "samtools fastq -@{threads} {input.host_bam_namesorted} -1 {output.fq1} -2 {output.fq2}"
+        "samtools fastq -@{threads} {input.host_bam_namesorted} -1 {output.fq1} -2 {output.fq2} -s {output.single}"
 
 
 if not VIRUS:
@@ -79,7 +89,7 @@ if not VIRUS:
             gdc_bam = join(WORK_DIR, 'detect_viral_reference', 'host_unmapped_or_mate_unmapped_to_gdc.bam')
         threads: THREADS
         shell:
-            "bwa mem -Y -t{threads} {input.gdc_fa} {input.fq1} {input.fq2}"
+            "bwa mem -Y -t{threads} {input.gdc_fa} {input.fq1} {input.fq2} "
             " | samtools sort -@{threads} -Obam -o {output.gdc_bam}"
 
     rule index_virus_bam:
@@ -129,7 +139,7 @@ if not VIRUS:
             mosdepth_regions_bed_gz = rules.mosdepth.output.mosdepth_regions_bed_gz,
             mosdepth_thresholds_bed_gz = rules.mosdepth.output.mosdepth_thresholds_bed_gz,
         output:
-            oncoviruses_tsv = join(OUTPUT_DIR, 'prioritized_oncoviruses.tsv'),
+            oncoviruses_tsv = PRIO_TSV,
         shell:
             "echo '## Viral sequences (from {ONCOVIRAL_SOURCE_URL}) found in unmapped reads' > {output.oncoviruses_tsv} &&"
             "echo '## Sample: {SAMPLE}' >> {output.oncoviruses_tsv} && "
@@ -156,10 +166,10 @@ if not VIRUS:
                             viruses.append(virus)
             if not viruses:
                 warn(
-                    'Not found any viruses with significant coverage. '
-                    'You can explore the full list at {input.tsv} and rerun with '
-                    'the --virus option explicitly.')
-                sys.exit(0)
+                    f'Not found any viruses with significant coverage. '
+                    f'You can explore the full list at {input.tsv} and rerun with '
+                    f'the --virus option explicitly.')
+                shell('touch {output.selected_viruses_tsv}')
             else:
                 print(f'Found viruses: {", ".join(viruses)}')
                 with open(output.selected_viruses_tsv, 'w') as out:
@@ -287,6 +297,7 @@ rule index_comb_ref_bam:
     shell:
         "samtools index {input.bam}"
 
+# if SV_CALLER == 'manta':
 rule prep_manta:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
@@ -298,7 +309,7 @@ rule prep_manta:
         manta_dir = join(WORK_DIR, 'step8_{virus}_manta')
     group: 'manta'
     shell:
-        "configManta.py "
+        py2_conda_cmd + " configManta.py "
         "--bam={input.bam} "
         "--referenceFasta={input.ref} "
         "--exome "
@@ -312,21 +323,23 @@ rule run_manta:
     threads: max(10, THREADS)
     group: 'manta'
     shell:
-        "{input.run_script} -m local"
+        py2_conda_cmd + " {input.run_script} -m local"
 
-rule filter_manta:
+sv_output_rule = rules.run_manta
+
+rule filter_vcf:
     input:
-        vcf = rules.run_manta.output.vcf
+        vcf = sv_output_rule.output.vcf
     output:
         vcf = join(WORK_DIR, 'step9_{virus}_manta_filter/breakpoints.vcf.gz')
     shell:
         "bcftools view {input.vcf} | "
         "grep -P '^#|{wildcards.virus}' | "
-        "bcftools filter -i \"IMPRECISE=0\" -Oz -o {output.vcf}"
+        "bcftools filter -e \"IMPRECISE=1\" -Oz -o {output.vcf}"
 
 rule snpeff:
     input:
-        vcf = rules.filter_manta.output.vcf,
+        vcf = rules.filter_vcf.output.vcf,
     output:
         vcf = join(WORK_DIR, 'step10_{virus}_snpeff/breakpoints.eff.vcf.gz')
     params:
@@ -453,14 +466,15 @@ rule merged_viruses:
         merge_viruses_input_fn
     output:
         RESULT_PATH
-        # join(WORK_DIR, 'all.done')
     run:
-        if len(input) > 1:
-            shell('bcftools merge {input} -Oz -o {output}')
+        if len(input) == 0:
+            shell('touch {output}')
         else:
-            shell('cp {input} {output}')
-        shell('tabix -p vcf {output}')
-        # 'touch {output}'
+            if len(input) > 1:
+                shell('bcftools merge {input} -Oz -o {output}')
+            else:
+                shell('cp {input} {output}')
+            shell('tabix -p vcf {output}')
 
 
-
+# TODO: count viruses, breakpoints and genes for MultiQC report

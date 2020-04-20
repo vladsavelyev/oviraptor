@@ -16,20 +16,18 @@ requirements:
     {% for dep in data.install_requires -%}
     - {{ dep.lower() }}
     {% endfor %}
-    - samtools
-    - sambamba
-    - bwa
-    - snakemake
     - ngs_utils
   run:
     - python >=3.7.3
     {% for dep in data.install_requires -%}
     - {{ dep.lower() }}
     {% endfor %}
+    - snakemake
     - samtools
     - sambamba
+    - mosdepth
     - bwa
-    - snakemake
+    - bcftools
     - ngs_utils
 
 test:
