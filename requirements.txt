@@ -1,2 +1,3 @@
 versionpy
 click
+cyvcf2

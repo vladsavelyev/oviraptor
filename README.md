@@ -22,7 +22,7 @@ Installing conda is optional if you have the following tools installed and avail
 - `bcftools`
 - `snakemake`
 - `mosdepth` (on macOS, you can pull this docker image instead: `docker pull quay.io/biocontainers/mosdepth:0.2.9--hbeb723e_0`
-- `python2` and Manta's `configManta.py` (you can install it in a separate environment as python2 clashes with python3, but make sure they both envs are appended to $PATH
+- `python2` and Manta's `configManta.py` (you can install it in a separate environment as python2 clashes with python3, but make sure they both envs are appended to $PATH). Or you can pull a dockerized version with `docker pull quay.io/biocontainers/manta:1.6.0--py27_0`.
 
 Usage:
 

@@ -1,13 +1,12 @@
-import sys
 from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
-import cyvcf2
-
-from ngs_utils.file_utils import which, safe_mkdir, verify_file
+import subprocess
+from ngs_utils.file_utils import which, safe_mkdir, verify_file, get_ungz_gz
 from ngs_utils.logger import warn
 from hpc_utils import hpc
 from ngs_utils.vcf_utils import add_cyvcf2_hdr
 from ngs_utils.reference_data import get_key_genes_bed
+from ngs_utils.vcf_utils import count_vars, vcf_contains_field, iter_vcf
 
 from oncoviruses import package_path
 
@@ -113,20 +112,22 @@ if not VIRUS:
         params:
             work_dir = mosdepth_work_dir,
             prefix = mosdepth_prefix,
+            image = 'quay.io/biocontainers/mosdepth:0.2.9--hbeb723e_0'
         threads: THREADS
         run:
+            chroms_bed = join(params.work_dir, "chroms.bed")
             awk_cmd = "awk 'BEGIN {{FS=\"\\t\"}}; {{print $1 FS \"0\" FS $2}}'"
+            shell(f'{awk_cmd} {input.fai} > {chroms_bed}')
             mosdepth_cmd = (
-                f'mosdepth {params.prefix} {input.bam} -t{threads} -n --thresholds 1,5,25 '
-                f'--by <({awk_cmd} {input.fai}) '
+                f'mosdepth {params.prefix} {input.bam} -t{threads} -n --thresholds 1,5,25 --by {chroms_bed} '
             )
-            if hpc.name == 'vlad':
+            import platform
+            if platform.system() == 'Darwin':
                 # using dockerized mosdepth
                 bam_dir = abspath(dirname(input.bam))
-                fai_dir = abspath(dirname(input.fai))
                 docker_mosdepth_cmd = (
-                    f'docker run -v{bam_dir}:{bam_dir} -v{fai_dir}:{fai_dir} -v{params.work_dir}:/work '
-                    f'quay.io/biocontainers/mosdepth:0.2.9--hbeb723e_0 ' +
+                    f'docker run -v{bam_dir}:{bam_dir} -v{params.work_dir}:/work '
+                    f'{params.image} ' +
                     mosdepth_cmd.replace(params.work_dir, '/work')
                 )
                 shell(docker_mosdepth_cmd)
@@ -144,7 +145,7 @@ if not VIRUS:
             "echo '## Viral sequences (from {ONCOVIRAL_SOURCE_URL}) found in unmapped reads' > {output.oncoviruses_tsv} &&"
             "echo '## Sample: {SAMPLE}' >> {output.oncoviruses_tsv} && "
             "echo '#virus\tsize\tdepth\t1x\t5x\t25x' >> {output.oncoviruses_tsv} && "
-            "paste <(zcat {input.mosdepth_regions_bed_gz}) <(zgrep -v ^# {input.mosdepth_thresholds_bed_gz}) | "
+            "paste <(gunzip -c {input.mosdepth_regions_bed_gz}) <(zgrep -v ^# {input.mosdepth_thresholds_bed_gz}) | "
             "awk 'BEGIN {{FS=\"\\t\"}} {{ print $1 FS $3 FS $4 FS $10/$3 FS $11/$3 FS $12/$3}}' | "
             "sort -n -r -k 5,5 >> {output.oncoviruses_tsv}"
 
@@ -298,32 +299,68 @@ rule index_comb_ref_bam:
         "samtools index {input.bam}"
 
 # if SV_CALLER == 'manta':
-rule prep_manta:
+MANTA_IMG = 'quay.io/biocontainers/manta:1.6.0--py27_0'
+rule run_manta:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
         bai = rules.index_comb_ref_bam.output.bai,
         ref = COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa,
     output:
-        run_script = join(WORK_DIR, 'step8_{virus}_manta/runWorkflow.py'),
-    params:
-        manta_dir = join(WORK_DIR, 'step8_{virus}_manta')
-    group: 'manta'
-    shell:
-        py2_conda_cmd + " configManta.py "
-        "--bam={input.bam} "
-        "--referenceFasta={input.ref} "
-        "--exome "
-        "--runDir={params.manta_dir}"
-
-rule run_manta:
-    input:
-        run_script = rules.prep_manta.output.run_script,
-    output:
         vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
-    threads: max(10, THREADS)
+    params:
+        work_dir = join(WORK_DIR, 'step8_{virus}_manta'),
+        image = MANTA_IMG,
     group: 'manta'
-    shell:
-        py2_conda_cmd + " {input.run_script} -m local"
+    run:
+        run_script = join(params.work_dir, "runWorkflow.py")
+        shell(f'test -e {run_script} && rm {run_script} || exit 0')  # remove if exists
+        tool_cmd = (
+            f'configManta.py '
+            f'--bam={input.bam} '
+            f'--referenceFasta={input.ref} '
+            f'--exome '
+            f'--runDir={params.work_dir} && ls {params.work_dir} && '
+            f'{run_script} -m local'
+        )
+        if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
+            bam_dir = abspath(dirname(input.bam))
+            ref_dir = abspath(dirname(input.ref))
+            shell(
+                f'docker run ' 
+                f'-v{bam_dir}:{bam_dir} ' 
+                f'-v{ref_dir}:{ref_dir} ' 
+                f'-v{params.work_dir}:/work '
+                f'{params.image} '
+                f'bash -c "{tool_cmd.replace(params.work_dir, "/work")}"'
+            )
+        else:
+            shell(f'{py2_conda_cmd} {tool_cmd}')
+
+# rule run_manta:
+#     input:
+#         run_script = rules.prep_manta.output.run_script,
+#     output:
+#         vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
+#     params:
+#         image = MANTA_IMG,
+#     threads: max(10, THREADS)
+#     group: 'manta'
+#     run:
+#         tool_cmd = f'{input.run_script} -m local'
+#
+#         if subprocess.run(f'docker images -q {params.image} 2>/dev/null').returncode == 0:
+#             bam_dir = abspath(dirname(input.bam))
+#             ref_dir = abspath(dirname(input.ref))
+#             shell(
+#                 f'docker run '
+#                 f'-v{bam_dir}:{bam_dir} '
+#                 f'-v{ref_dir}:{ref_dir} '
+#                 f'-v{params.work_dir}:/work '
+#                 f'{params.image} {tool_cmd.replace(params.work_dir, "/work")}'
+#             )
+#         else:
+#             shell(f'{py2_conda_cmd} {tool_cmd}')
+
 
 sv_output_rule = rules.run_manta
 
@@ -331,50 +368,54 @@ rule filter_vcf:
     input:
         vcf = sv_output_rule.output.vcf
     output:
-        vcf = join(WORK_DIR, 'step9_{virus}_manta_filter/breakpoints.vcf.gz')
+        vcf = join(WORK_DIR, 'step9_{virus}_manta_filter/breakpoints.vcf.gz'),
+        tbi = join(WORK_DIR, 'step9_{virus}_manta_filter/breakpoints.vcf.gz.tbi'),
     shell:
         "bcftools view {input.vcf} | "
-        "grep -P '^#|{wildcards.virus}' | "
+        "egrep -e '^#|{wildcards.virus}' | "
         "bcftools filter -e \"IMPRECISE=1\" -Oz -o {output.vcf}"
+        " && tabix -p vcf {output.vcf}"
 
-rule snpeff:
-    input:
-        vcf = rules.filter_vcf.output.vcf,
-    output:
-        vcf = join(WORK_DIR, 'step10_{virus}_snpeff/breakpoints.eff.vcf.gz')
-    params:
-        genome = GENOME,
-        tmp_dir = join(WORK_DIR, 'step10_{virus}_snpeff', 'tmp'),
-        csv  = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.csv'),
-        html = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.html'),
-    resources:
-        mem_mb = 2000
-    run:
-        safe_mkdir(params.tmp_dir)
-        snpeff_db = hpc.get_ref_file(genome=params.genome, key='snpeff')
-        snpeff_db_dir = dirname(snpeff_db)
-        assert params.genome == 'hg38', 'Only hg38 is suported for snpEff'
-        snpeff_db_name = 'GRCh38.86'  # for some reason it doesn't matter if the subdir is named GRCh38.92
-
-        jvm_opts = f'-Xms750m -Xmx4g'
-        java_args = f'-Djava.io.tmpdir={params.tmp_dir}'
-
-        shell('snpEff {jvm_opts} {java_args} '
-              '-dataDir {snpeff_db_dir} {snpeff_db_name} '
-              '-hgvs -cancer -i vcf -o vcf '
-              '-csvStats {params.csv} -s {params.html} '
-              '{input.vcf} '
-              '| bgzip -c > {output.vcf} && tabix -p vcf {output.vcf}')
-        verify_file(output.vcf, is_critical=True)
+# rule snpeff:
+#     input:
+#         vcf = rules.filter_vcf.output.vcf,
+#     output:
+#         vcf = join(WORK_DIR, 'step10_{virus}_snpeff/breakpoints.eff.vcf.gz')
+#     params:
+#         genome = GENOME,
+#         tmp_dir = join(WORK_DIR, 'step10_{virus}_snpeff', 'tmp'),
+#         csv  = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.csv'),
+#         html = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.html'),
+#     resources:
+#         mem_mb = 2000
+#     run:
+#         safe_mkdir(params.tmp_dir)
+#         snpeff_db = hpc.get_ref_file(genome=params.genome, key='snpeff')
+#         snpeff_db_dir = dirname(snpeff_db)
+#         assert params.genome == 'hg38', 'Only hg38 is suported for snpEff'
+#         snpeff_db_name = 'GRCh38.86'  # for some reason it doesn't matter if the subdir is named GRCh38.92
+#
+#         jvm_opts = f'-Xms750m -Xmx4g'
+#         java_args = f'-Djava.io.tmpdir={params.tmp_dir}'
+#
+#         shell('snpEff {jvm_opts} {java_args} '
+#               '-dataDir {snpeff_db_dir} {snpeff_db_name} '
+#               '-hgvs -cancer -i vcf -o vcf '
+#               '-csvStats {params.csv} -s {params.html} '
+#               '{input.vcf} '
+#               '| bgzip -c > {output.vcf} && tabix -p vcf {output.vcf}')
+#         verify_file(output.vcf, is_critical=True)
 
 # bcftools doesn't work with 4th columns in bed
 # vcfanno doesn't work when mulitple genes overlaping one variant
 # so using bedtools intersect plus a cyvcf2 loop
 rule annotate_with_viral_genes:
     input:
-        vcf = rules.snpeff.output.vcf,
+        vcf = rules.filter_vcf.output.vcf,
+        tbi = rules.filter_vcf.output.tbi,
     output:
-        vcf = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.eff.viral_genes.vcf.gz'),
+        vcf = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz'),
+        tbi = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz.tbi'),
     params:
         overlap_tsv = join(WORK_DIR, 'step10_{virus}_viral_genes/overlap.tsv')
     run:
@@ -391,17 +432,21 @@ rule annotate_with_viral_genes:
                     _, _, var_id, _, _, _, _, _, _, _, _, gene = l.strip().split('\t')
                     gene_by_id[var_id].append(gene)
 
-            vcf = cyvcf2.VCF(input.vcf)
-            add_cyvcf2_hdr(vcf, 'ViralGenes', '.', 'String',
-                           'Viral genes that this breakpoint overlaps (and likely disrupts)')
-            w = cyvcf2.Writer(output.vcf, vcf)
-            w.write_header()
-            for rec in vcf:
-                genes = [g for g in gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), []) if g != '.']
+            def proc_rec(rec, vcf):
+                genes = [g for g in
+                         gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
+                         if g != '.']
                 if genes:
                     rec.INFO['ViralGenes'] = ','.join(genes)
-                w.write_record(rec)
-        shell('tabix -p vcf {output.vcf}')
+                return rec
+            def proc_hdr(vcf):
+                add_cyvcf2_hdr(vcf, 'ViralGenes', '.', 'String',
+                               'Viral genes that this breakpoint overlaps (and likely disrupts)')
+            iter_vcf(input.vcf, output.vcf, proc_rec=proc_rec, proc_hdr=proc_hdr)
+
+        before = count_vars(input.vcf)
+        after = count_vars(output.vcf)
+        assert before == after, (before, after)
 
 rule annotate_with_host_genes:
     input:
@@ -410,7 +455,7 @@ rule annotate_with_host_genes:
         # coding_regions_bed = hpc.get_ref_file(GENOME, key='coding_regions'),
         fai = COMBINED_FA + '.fai',
     output:
-        vcf = join(WORK_DIR, 'step11_{virus}_host_genes/breakpoints.eff.genes.host_cancer_genes.vcf.gz'),
+        vcf = join(WORK_DIR, 'step11_{virus}_host_genes/breakpoints.genes.host_cancer_genes.vcf.gz'),
     params:
         overlap_tsv = join(WORK_DIR, 'step11_{virus}_host_genes/overlap.tsv')
     run:
@@ -433,15 +478,21 @@ rule annotate_with_host_genes:
                     if distance < 50 or strand == '+' and distance < 0 or strand == '-' and distance > 0:
                         gene_by_id[var_id].append(gene)
 
-        vcf = cyvcf2.VCF(input.vcf)
-        add_cyvcf2_hdr(vcf, 'NearestCancerGenes', '.', 'String', 'Nearest cancer gene to the breakpoint')
-        w = cyvcf2.Writer(output.vcf, vcf)
-        w.write_header()
-        for rec in vcf:
-            genes = [g for g in gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), []) if g != '.']
+        def proc_rec(rec, vcf):
+            genes = [g for g in
+                     gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
+                     if g != '.']
             if genes:
                 rec.INFO['NearestCancerGenes'] = ','.join(genes)
-            w.write_record(rec)
+            return rec
+        def proc_hdr(vcf):
+            add_cyvcf2_hdr(vcf, 'NearestCancerGenes', '.', 'String',
+                           'Nearest cancer gene to the breakpoint')
+        iter_vcf(input.vcf, output.vcf, proc_rec=proc_rec, proc_hdr=proc_hdr)
+
+        before = count_vars(input.vcf)
+        after = count_vars(output.vcf)
+        assert before == after, (before, after)
 
 last_vcf_rule = rules.annotate_with_host_genes
 
