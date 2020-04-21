@@ -90,7 +90,7 @@ if not VIRUS:
         params:
             rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
         shell:
-            "bwa mem -Y -R {params.rg} -t{threads} {input.gdc_fa} {input.fq1} {input.fq2} "
+            "bwa mem -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2} "
             " | samtools sort -@{threads} -Obam -o {output.gdc_bam}"
 
     rule index_virus_bam:
@@ -208,7 +208,7 @@ rule bwa_unmapped_and_mateunmapped_to_viral_ref:
         # -T1 = minimum score to output [default 30]
         # -a  = output all alignments for SE or unpaired PE
         # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -a -Y -t{threads} -R {params.rg} {input.virus_bwa_prefix} {input.fq1} {input.fq2}"
+        "bwa mem -a -Y -t{threads} -R '{params.rg}' {input.virus_bwa_prefix} {input.fq1} {input.fq2}"
         " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
 
 
@@ -278,7 +278,7 @@ rule bwa_viral_bridging_to_comb_ref:
         # -T1 = minimum score to output [default 30]
         # -a  = output all alignments for SE or unpaired PE
         # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -a -Y -t{threads} -R {params.rg} {input.bwa_prefix} {input.fq1} {input.fq2}"
+        "bwa mem -a -Y -t{threads} -R '{params.rg}' {input.bwa_prefix} {input.fq1} {input.fq2}"
         " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}"
 
 # # Removing reads that are not helpful: fully unmapped pairs. In other words, keeping
