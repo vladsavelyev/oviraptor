@@ -87,8 +87,10 @@ if not VIRUS:
         output:
             gdc_bam = join(WORK_DIR, 'detect_viral_reference', 'host_unmapped_or_mate_unmapped_to_gdc.bam')
         threads: THREADS
+        params:
+            rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
         shell:
-            "bwa mem -Y -t{threads} {input.gdc_fa} {input.fq1} {input.fq2} "
+            "bwa mem -Y -R {params.rg} -t{threads} {input.gdc_fa} {input.fq1} {input.fq2} "
             " | samtools sort -@{threads} -Obam -o {output.gdc_bam}"
 
     rule index_virus_bam:
@@ -121,16 +123,13 @@ if not VIRUS:
             mosdepth_cmd = (
                 f'mosdepth {params.prefix} {input.bam} -t{threads} -n --thresholds 1,5,25 --by {chroms_bed} '
             )
-            import platform
-            if platform.system() == 'Darwin':
-                # using dockerized mosdepth
+            if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
                 bam_dir = abspath(dirname(input.bam))
-                docker_mosdepth_cmd = (
+                shell(
                     f'docker run -v{bam_dir}:{bam_dir} -v{params.work_dir}:/work '
                     f'{params.image} ' +
-                    mosdepth_cmd.replace(params.work_dir, '/work')
+                    f'{mosdepth_cmd.replace(params.work_dir, "/work")}'
                 )
-                shell(docker_mosdepth_cmd)
             else:
                 shell(mosdepth_cmd)
 
@@ -202,12 +201,14 @@ rule bwa_unmapped_and_mateunmapped_to_viral_ref:
     output:
         virus_bam_possorted = join(WORK_DIR, 'step3_host_unmapped_and_bridging_reads_to_{virus}.possorted.bam')
     threads: THREADS
+    params:
+        rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
     shell:
         # using the polyidus bwa command.
         # -T1 = minimum score to output [default 30]
         # -a  = output all alignments for SE or unpaired PE
         # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -a -Y -t{threads} {input.virus_bwa_prefix} {input.fq1} {input.fq2}"
+        "bwa mem -a -Y -t{threads} -R {params.rg} {input.virus_bwa_prefix} {input.fq1} {input.fq2}"
         " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
 
 
@@ -270,12 +271,14 @@ rule bwa_viral_bridging_to_comb_ref:
     output:
         comb_bam_possorted = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam')
     threads: THREADS
+    params:
+        rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
     shell:
         # using the polyidus bwa command.
         # -T1 = minimum score to output [default 30]
         # -a  = output all alignments for SE or unpaired PE
         # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -a -Y -t{threads} {input.bwa_prefix} {input.fq1} {input.fq2}"
+        "bwa mem -a -Y -t{threads} -R {params.rg} {input.bwa_prefix} {input.fq1} {input.fq2}"
         " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}"
 
 # # Removing reads that are not helpful: fully unmapped pairs. In other words, keeping
