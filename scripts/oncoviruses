@@ -15,7 +15,16 @@ from oncoviruses import package_path
 @click.command()
 @click.argument('bam', type=click.Path(exists=True))
 @click.option('-o', '--output-dir', 'output_dir', type=click.Path())
+@click.option('-v', '--virus', 'viruses',
+              help='Optional virus species to check for (e.g. hpv16, hpv33, etc.). '
+                   'Can be multiple comma-separated. If not provided, will be detected.')
+@click.option('--only-detect', 'only_detect', is_flag=True,
+              help='Do not find integration sites: only detect the oncoviral content in the sample. '
+                   'Enables usage of the tool in 2 steps: first with `--only-detect`, '
+                   'then with `--virus <detected_virus>`')
+
 # Reference: either --viruses-fa and (--host-fa or --combined-reference) explicitly, or --genomes and optional -g
+@click.option('--gtf', 'gtf_file', help='Path to a GTF file for host genes annotations')
 @click.option('--host-fa', 'host_fa', help='Path to host reference (e.g. hg38.fa)')
 @click.option('--viruses-fa', 'viruses_fa',
               help='Path to viral sequences bwa index prefix (e.g. gdc-viral.fa from bcbio bundle)')
@@ -27,9 +36,6 @@ from oncoviruses import package_path
 
 @click.option('-s', '--sample-name' '--prefix', 'sample_name',
               help='Prefix for output files. Default is the basename of the output file.')
-@click.option('-v', '--virus', 'virus',
-              help='Optional virus species to check for (e.g. hpv16, hpv33, etc.). '
-                   'If not provided, will be detected.')
 
 @click.option('-t', '--threads', '-j', '--jobs', '--cores', 'requested_cores', type=click.INT,
               help='Maximum number of cores to use at single time (works both for local and cluster runs)')
@@ -37,8 +43,8 @@ from oncoviruses import package_path
 @click.option('-n', '--dryrun', 'dryrun', is_flag=True,
               help='Propagated to snakemake. Prints rules and commands to be run without actually executing them.')
 
-def main(bam, output_dir, host_fa, viruses_fa, combined_fa, genomes_dir=None, sample_name=None, virus=None,
-         requested_cores=None, dryrun=None, unlock=None):
+def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_fa=None, viruses_fa=None, combined_fa=None,
+         genomes_dir=None, sample_name=None, requested_cores=None, dryrun=None, unlock=None):
 
     if not bam.endswith('.bam'):
         raise click.BadParameter(f'Input must be a BAM file, got: {bam}')
@@ -66,8 +72,10 @@ def main(bam, output_dir, host_fa, viruses_fa, combined_fa, genomes_dir=None, sa
         'cores': cores,
     }
 
-    if virus:
-        conf['virus'] = virus
+    if viruses:
+        conf['viruses'] = viruses
+    if only_detect:
+        conf['only_detect'] = only_detect
 
     # check hpc_utils can find the genomes dir, and error out if not
     hpc.set_genomes_dir(genomes_dir)
@@ -90,24 +98,33 @@ def main(bam, output_dir, host_fa, viruses_fa, combined_fa, genomes_dir=None, sa
             log.critical(f'Please provide either --viruses-fa and (--combined-fa or --host-fa), or --genomes-dir')
         if host_fa:
             conf['host_fa'] = verify_file(host_fa)
+    if gtf_file:
+        conf['gtf_file'] = gtf_file
 
     # Checking that configManta.py and python2 is available, or if running in umccrise envirnoment so _python2 env is there
-    py2_env_path = hpc.secondary_conda_env('python2')
-    conf['py2_env_path'] = py2_env_path
+    py2_env_path = hpc.secondary_conda_env('python2', is_critical=False)
+    if py2_env_path:
+        conf['py2_env_path'] = py2_env_path
 
     run_snakemake(join(package_path(), "workflow.smk"), conf, output_dir=output_dir,
                   jobs=cores, unlock=unlock, dryrun=dryrun)
 
     result_path = join(output_dir, 'breakpoints.vcf.gz')
     prio_tsv = join(output_dir, 'prioritized_oncoviruses.tsv')
-    if not verify_file(result_path, silent=True):
+    if only_detect:
+        log.info(
+            f'Detected prioritized oncoviruses are reported in:\n {prio_tsv}\n '
+            f'You can pick the significan ones and rerun the tool with '
+            f'the `--virus` option and without `--only-detect`'
+        )
+    elif not verify_file(result_path, silent=True):
         log.warn(
             f'Not found any viruses with significant coverage. '
-            f'You can explore the full list at {prio_tsv} and rerun with '
+            f'You can explore the full list at:\n {prio_tsv}\n and rerun with '
             f'the --virus option explicitly.')
     else:
-        log.info(f'Breakpoints reported in {result_path}, '
-                 f'prioritized viruses reported in {prio_tsv}')
+        log.info(f'Breakpoints reported in:\n {result_path}\n'
+                 f'Prioritized viruses reported in:\n {prio_tsv}')
 
 
 if __name__ == '__main__':
