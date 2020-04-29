@@ -176,7 +176,7 @@ if not VIRUSES:
             tsv = rules.prioritize_viruses.output.oncoviruses_tsv,
             gdc_fa = VIRUSES_FA,
         output:
-            selected_viruses_tsv = join(WORK_DIR, 'detect_viral_reference', 'integrated_viruses.tsv'),
+            selected_viruses_tsv = join(WORK_DIR, 'detect_viral_reference', 'present_viruses.txt'),
         run:
             viruses = []
             with open(input.tsv) as f:
@@ -205,12 +205,7 @@ rule create_viral_reference:
     output:
         virus_fa = join(WORK_DIR, '{virus}', '{virus}.fa'),
         virus_bwt = join(WORK_DIR, '{virus}', '{virus}.fa.bwt'),  # one of bwa index files
-    # params:
-    #     virus =
-        # selected_viruses_tsv = join(WORK_DIR, 'integrated_viruses.tsv'),
     shell:
-        # if isfile(params.selected_viruses_tsv):
-        #     viruses = open(params.selected_viruses_tsv).readlines()
         "samtools faidx {input.gdc_fa} {wildcards.virus} > {output.virus_fa}"
         " && bwa index {output.virus_fa}"
 
@@ -650,5 +645,3 @@ rule merged_viruses:
                 shell('cp {input} {output}')
             shell('tabix -p vcf {output}')
 
-
-# TODO: count viruses, breakpoints and genes for MultiQC report

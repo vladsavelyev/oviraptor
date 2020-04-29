@@ -57,7 +57,9 @@ bwa index genomes/hg38/hg38noalt_plus_gdcviral.fa
 ```
 
 
+## Ideas
 
+Annotation with genes. Include 100kbp downstream. Add RNA oncogenes, like CCAT1 (Long non-coding RNA that promotes tumor formation and is upregulated in colon cancer and other cancer cell types. This transcript may regulate long range chromosomal interactions, including at the Myc oncoprotein locus. Often affected by HPV18 integration).
 
 
 
