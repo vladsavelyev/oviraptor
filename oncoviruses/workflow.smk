@@ -340,7 +340,12 @@ rule run_manta:
             f'--referenceFasta={input.ref} '
             f'--exome '
             f'--runDir={params.work_dir} && ls {params.work_dir} && '
-            f'{run_script} -m local 2>&1 | grep -v "Adding command task" 1>&2'
+            f'{run_script} -m local 2>&1'
+            f' | grep -v "Adding command task"'
+            f' | grep -v "Launching command task"'
+            f' | grep -v "Task initiated on local node"'
+            f' | grep -v "launched from master workflow"'
+            f' 1>&2'
         )
         if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
             bam_dir = abspath(dirname(input.bam))
