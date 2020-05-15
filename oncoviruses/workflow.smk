@@ -340,7 +340,7 @@ rule run_manta:
             f'--referenceFasta={input.ref} '
             f'--exome '
             f'--runDir={params.work_dir} && ls {params.work_dir} && '
-            f'{run_script} -m local'
+            f'{run_script} -m local 2>&1 | grep -v "Adding command task" 1>&2'
         )
         if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
             bam_dir = abspath(dirname(input.bam))
@@ -355,32 +355,6 @@ rule run_manta:
             )
         else:
             shell(f'{py2_conda_cmd} {tool_cmd}')
-
-# rule run_manta:
-#     input:
-#         run_script = rules.prep_manta.output.run_script,
-#     output:
-#         vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
-#     params:
-#         image = MANTA_IMG,
-#     threads: max(10, THREADS)
-#     group: 'manta'
-#     run:
-#         tool_cmd = f'{input.run_script} -m local'
-#
-#         if subprocess.run(f'docker images -q {params.image} 2>/dev/null').returncode == 0:
-#             bam_dir = abspath(dirname(input.bam))
-#             ref_dir = abspath(dirname(input.ref))
-#             shell(
-#                 f'docker run '
-#                 f'-v{bam_dir}:{bam_dir} '
-#                 f'-v{ref_dir}:{ref_dir} '
-#                 f'-v{params.work_dir}:/work '
-#                 f'{params.image} {tool_cmd.replace(params.work_dir, "/work")}'
-#             )
-#         else:
-#             shell(f'{py2_conda_cmd} {tool_cmd}')
-
 
 sv_output_rule = rules.run_manta
 
