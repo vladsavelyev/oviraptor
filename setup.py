@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 from os.path import join
-from setuptools import setup
-import versionpy
+from setuptools import setup, find_packages
+from versionpy import get_version, find_package_files, get_reqs
 
 import oncoviruses
 pkg = oncoviruses.__name__
 
-version = versionpy.get_version(pkg)
+version = get_version(pkg)
 
 setup(
     name=pkg,
@@ -19,10 +19,13 @@ setup(
     long_description_content_type="text/markdown",
     url='https://github.com/umccr/' + pkg,
     license='GPLv3',
-    packages=[pkg],
+    package_data={
+        pkg: find_package_files('', pkg),
+    },
+    packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    install_requires=versionpy.get_reqs(),
+    install_requires=get_reqs(),
     scripts=[
         join('scripts', 'oncoviruses'),
         # legacy:
