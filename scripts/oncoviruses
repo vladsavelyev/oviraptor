@@ -3,12 +3,13 @@ import sys
 import os
 from os.path import dirname, abspath, join, basename, isfile, isdir, splitext
 import click
-from hpc_utils import hpc
 from ngs_utils.call_process import run_simple
 from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir, file_exists, verify_file
 from ngs_utils import logger as log
 from ngs_utils.snakemake_utils import run_snakemake
 from ngs_utils.utils import set_locale; set_locale()
+from hpc_utils import hpc
+from reference_data import api as refdata
 from oncoviruses import package_path
 
 
@@ -77,10 +78,10 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
     if only_detect:
         conf['only_detect'] = only_detect
 
-    # check hpc_utils can find the genomes dir, and error out if not
-    hpc.set_genomes_dir(genomes_dir)
-    if hpc.genomes_dir:
-        conf['genomes_dir'] = hpc.genomes_dir
+    # check reference_data can find the genomes dir, and error out if not
+    genomes_dir = refdata.find_genomes_dir(genomes_dir)
+    if genomes_dir:
+        conf['genomes_dir'] = genomes_dir
     if combined_fa:
         if not verify_file(combined_fa + '.bwt'):
             log.critical(f'Please, index {combined_fa} with `bwa index {combined_fa}`')
@@ -91,7 +92,7 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
         if not verify_file(viruses_fa + '.fai'):
             log.critical(f'Please, index {viruses_fa} with `samtools faidx {viruses_fa}`')
         conf['viruses_fa'] = verify_file(viruses_fa)
-    if not hpc.genomes_dir:
+    if not refdata.genomes_dir:
         if not viruses_fa:
             log.critical(f'Please provide either --combined-fa, or both --host-fa and --viruses-fa, or --genomes-dir')
         if not viruses_fa or (not combined_fa and not host_fa):

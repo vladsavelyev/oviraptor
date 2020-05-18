@@ -6,10 +6,10 @@ import glob
 import re
 from ngs_utils.file_utils import which, safe_mkdir, verify_file, get_ungz_gz
 from ngs_utils.logger import warn, critical
-from hpc_utils import hpc
 from ngs_utils.vcf_utils import add_cyvcf2_hdr
 from ngs_utils.reference_data import get_key_genes_bed
 from ngs_utils.vcf_utils import count_vars, vcf_contains_field, iter_vcf
+from reference_data import api as refdata
 from oncoviruses import package_path
 
 
@@ -31,15 +31,15 @@ ONLY_DETECT = config.get('only_detect', False)
 THREADS = config.get('cores', 10)
 
 if config.get('genomes_dir'):
-    hpc.set_genomes_dir(config.get('genomes_dir'))
+    refdata.find_genomes_dir(config.get('genomes_dir'))
 
 GENOME = 'hg38'
 COMBINED_FA = config.get('combined_fa') or \
-    hpc.get_ref_file(genome=GENOME, key='fa_plus_gdc_viruses', must_exist=False)
+    refdata.get_ref_file(genome=GENOME, key='fa_plus_gdc_viruses', must_exist=False)
 HOST_FA = config.get('host_fa') or \
-    hpc.get_ref_file(genome=GENOME, key='fa', must_exist=False)
+    refdata.get_ref_file(genome=GENOME, key='fa', must_exist=False)
 VIRUSES_FA = config.get('viruses_fa') or \
-    hpc.get_ref_file(key='gdc_viral_fa', must_exist=False)
+    refdata.get_ref_file(genome=GENOME, key='gdc_viral_fa', must_exist=False)
 assert VIRUSES_FA and (COMBINED_FA or HOST_FA)
 
 WORK_DIR = join(OUTPUT_DIR, 'work')
@@ -53,9 +53,9 @@ if PY2_ENV_PATH:
 
 GTF_PATH = config.get('gtf_file')
 if not GTF_PATH:
-    pyens = hpc.get_ref_file(key='pyensembl_data', must_exist=False)
+    pyens = refdata.get_ref_file(GENOME, key='pyensembl_data', must_exist=False)
     if pyens:
-        pattern = join(hpc.get_ref_file(key='pyensembl_data', must_exist=False),
+        pattern = join(refdata.get_ref_file(GENOME, key='pyensembl_data', must_exist=False),
                                'GRCh38/ensembl*/Homo_sapiens.GRCh38.*.gtf.gz')
         found = glob.glob(pattern)
         if not found:
