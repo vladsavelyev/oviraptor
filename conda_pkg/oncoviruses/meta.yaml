@@ -13,15 +13,13 @@ build:
 requirements:
   build:
     - python ==3.7.*
-    {% for dep in data.install_requires -%}
-    - {{ dep.lower() }}
-    {% endfor %}
+    - versionpy
     - ngs_utils
   run:
     - python ==3.7.*
-    {% for dep in data.install_requires -%}
-    - {{ dep.lower() }}
-    {% endfor %}
+    - ngs_utils
+    - click
+    - cyvcf2
     - snakemake
     - samtools
     - sambamba
