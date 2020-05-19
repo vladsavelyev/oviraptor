@@ -8,6 +8,7 @@ from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir, f
 from ngs_utils import logger as log
 from ngs_utils.snakemake_utils import run_snakemake
 from ngs_utils.utils import set_locale; set_locale()
+from ngs_utils import conda_utils
 from reference_data import api as refdata
 from oncoviruses import package_path
 
@@ -102,7 +103,7 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
         conf['gtf_file'] = gtf_file
 
     # Checking that configManta.py and python2 is available, or if running in umccrise envirnoment so _python2 env is there
-    py2_env_path = hpc.secondary_conda_env('python2', is_critical=False)
+    py2_env_path = conda_utils.secondary_conda_env('python2', is_critical=False)
     if py2_env_path:
         conf['py2_env_path'] = py2_env_path
 
