@@ -12,13 +12,13 @@ build:
 
 requirements:
   build:
-    - python >=3.7.3
+    - python ==3.7.*
     {% for dep in data.install_requires -%}
     - {{ dep.lower() }}
     {% endfor %}
     - ngs_utils
   run:
-    - python >=3.7.3
+    - python ==3.7.*
     {% for dep in data.install_requires -%}
     - {{ dep.lower() }}
     {% endfor %}
