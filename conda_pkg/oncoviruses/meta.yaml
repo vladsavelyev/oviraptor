@@ -1,8 +1,8 @@
-{% set data=load_setup_py_data() %}
+{% set version=load_setup_py_data().get('version') %}
 
 package:
-  name: {{ data.name }}
-  version: {{ data.version }}
+  name: oncoviruses
+  version: "{{ version }}"
 
 source:
   path: ../../
