@@ -33,7 +33,7 @@ test:
     - oncoviruses --help
 
 about:
-  home: "{{ data.url }}"
+  home: https://github.com/umccr/oncoviruses
   license: "GNU General Public License v3 (GPLv3)"
   license_family: GPL3
-  summary: "{{ data.description }}"
+  summary: "'Detection of oncoviruses in tumor whole genome samples'"

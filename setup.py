@@ -3,9 +3,7 @@ from os.path import join
 from setuptools import setup, find_packages
 from versionpy import get_version, find_package_files, get_reqs
 
-import oncoviruses
-pkg = oncoviruses.__name__
-
+pkg = 'oncoviruses'
 version = get_version(pkg)
 
 setup(
