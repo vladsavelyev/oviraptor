@@ -8,7 +8,6 @@ from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir, f
 from ngs_utils import logger as log
 from ngs_utils.snakemake_utils import run_snakemake
 from ngs_utils.utils import set_locale; set_locale()
-from hpc_utils import hpc
 from reference_data import api as refdata
 from oncoviruses import package_path
 
@@ -32,8 +31,8 @@ from oncoviruses import package_path
 @click.option('--combined-fa', 'combined_fa',
               help='To speed up the analysis, you can merge the host and viral fasta '
                    'and index with `samtools faidx` and `bwa index`')
-@click.option('--genomes', '--genomes-dir', 'genomes_dir',
-              help='Path to umccrise genomes, alternative to all "*-fa" options')
+@click.option('--genomes', '--genomes-dir', 'input_genomes_url',
+              help='Path to the umccrise reference data, alternative to all "*-fa" options. Can be s3 or gds')
 
 @click.option('-s', '--sample-name' '--prefix', 'sample_name',
               help='Prefix for output files. Default is the basename of the output file.')
@@ -45,7 +44,7 @@ from oncoviruses import package_path
               help='Propagated to snakemake. Prints rules and commands to be run without actually executing them.')
 
 def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_fa=None, viruses_fa=None, combined_fa=None,
-         genomes_dir=None, sample_name=None, requested_cores=None, dryrun=None, unlock=None):
+         input_genomes_url=None, sample_name=None, requested_cores=None, dryrun=None, unlock=None):
 
     if not bam.endswith('.bam'):
         raise click.BadParameter(f'Input must be a BAM file, got: {bam}')
@@ -79,7 +78,7 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
         conf['only_detect'] = only_detect
 
     # check reference_data can find the genomes dir, and error out if not
-    genomes_dir = refdata.find_genomes_dir(genomes_dir)
+    genomes_dir = refdata.find_genomes_dir(input_genomes_url)
     if genomes_dir:
         conf['genomes_dir'] = genomes_dir
     if combined_fa:
