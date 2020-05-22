@@ -26,12 +26,6 @@ setup(
     install_requires=get_reqs(),
     scripts=[
         join('scripts', 'oncoviruses'),
-        # legacy:
-        join('scripts', 'filter_bam_bridging_reads.py'),
-        join('scripts', 'filter_bam_good_reads.py'),
-        join('scripts', 'filter_bam_good_unmapped_or_mate.py'),
-        join('scripts', 'filter_fastq.py'),
-        join('scripts', 'filter_viral_bam.py'),
     ],
     classifiers=[
         'Environment :: Console',
