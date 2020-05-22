@@ -318,6 +318,65 @@ rule index_comb_ref_bam:
     shell:
         "samtools index {input.bam}"
 
+rule extract_discordant:
+    input:
+        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
+    output:
+        bam = join(WORK_DIR, 'step8_{virus}_lumpy/disc.bam')
+    group: 'lumpy'
+    shell:
+        'samtools view -h -F 1294 {input.bam} | '
+        'samtools sort -Obam -o {output.bam}'
+
+rule extract_split:
+    input:
+        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
+    output:
+        bam = join(WORK_DIR, 'step8_{virus}_lumpy/split.bam')
+    params:
+        extractSplitReads = join(package_path(), 'lumpy', 'extractSplitReads_BwaMem')
+    group: 'lumpy'
+    shell:
+        'samtools view -h {input.bam} '
+        '| {params.extractSplitReads} -i stdin '
+        '| samtools sort -Obam -o {output.bam}'
+
+rule lumpy_histo:
+    input:
+        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
+    output:
+        join(WORK_DIR, 'step8_{virus}_lumpy/histo.txt')
+    params:
+        pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py')
+    group: 'lumpy'
+    shell:
+        'samtools view -r {SAMPLE} {input.bam} '
+        '| python {params.pairend_distro} '
+        '-r 101 '
+        '-X 4 '
+        '-N 10000 '
+        '-o {output}'
+
+rule run_lumpy:
+    input:
+        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
+        disc = rules.extract_discordant.output.bam,
+        split = rules.extract_split.output.bam,
+        histo = rules.lumpy_histo.output,
+        ref = COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa,
+    output:
+        vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
+    params:
+        lumpy = join(package_path(), 'lumpy', 'lumpy')
+    group: 'lumpy'
+    shell:
+        '{params.lumpy} '
+        '-mw 4 '
+        '-tt 0 '
+        '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
+        '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
+        '> {output.vcf}'
+
 # if SV_CALLER == 'manta':
 MANTA_IMG = 'quay.io/biocontainers/manta:1.6.0--py27_0'
 rule run_manta:
@@ -361,7 +420,8 @@ rule run_manta:
         else:
             shell(f'{py2_conda_cmd} {tool_cmd}')
 
-sv_output_rule = rules.run_manta
+# sv_output_rule = rules.run_manta
+sv_output_rule = rules.run_lumpy
 
 rule filter_vcf:
     input:
