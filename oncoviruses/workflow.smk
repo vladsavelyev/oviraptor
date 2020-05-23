@@ -44,7 +44,7 @@ assert VIRUSES_FA and (COMBINED_FA or HOST_FA)
 
 WORK_DIR = join(OUTPUT_DIR, 'work')
 
-SV_CALLER = 'manta'
+SV_CALLER = 'lumpy'
 
 PY2_ENV_PATH = config.get('py2_env_path')
 py2_conda_cmd = ''
@@ -393,8 +393,6 @@ rule run_lumpy:
             '| gsort - {input.fai} > {output.vcf}'
         )
 
-# if SV_CALLER == 'manta':
-MANTA_IMG = 'quay.io/biocontainers/manta:1.6.0--py27_0'
 rule run_manta:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
@@ -404,7 +402,7 @@ rule run_manta:
         vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
     params:
         work_dir = join(WORK_DIR, 'step8_{virus}_manta'),
-        image = MANTA_IMG,
+        image = 'quay.io/biocontainers/manta:1.6.0--py27_0',
     group: 'manta'
     run:
         run_script = join(params.work_dir, "runWorkflow.py")
@@ -436,8 +434,10 @@ rule run_manta:
         else:
             shell(f'{py2_conda_cmd} {tool_cmd}')
 
-# sv_output_rule = rules.run_manta
-sv_output_rule = rules.run_lumpy
+if SV_CALLER == 'manta':
+    sv_output_rule = rules.run_manta
+else:
+    sv_output_rule = rules.run_lumpy
 
 rule filter_vcf:
     input:
