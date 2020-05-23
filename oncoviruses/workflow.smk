@@ -341,21 +341,32 @@ rule extract_split:
         '| {params.extractSplitReads} -i stdin '
         '| samtools sort -Obam -o {output.bam}'
 
-rule lumpy_histo:
+rule lumpy_histo_samtools_view:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
+    output:
+        join(WORK_DIR, 'step8_{virus}_lumpy/reads.sam')
+    params:
+        pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py')
+    group: 'lumpy'
+    shell:
+        'samtools view -r {SAMPLE} {input.bam} > {output}'
+
+rule lumpy_histo:
+    input:
+        join(WORK_DIR, 'step8_{virus}_lumpy/reads.sam')
     output:
         join(WORK_DIR, 'step8_{virus}_lumpy/histo.txt')
     params:
         pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py')
     group: 'lumpy'
     shell:
-        'samtools view -r {SAMPLE} {input.bam} '
-        '| python {params.pairend_distro} '
-        '-r 101 '
+        'python {params.pairend_distro} '
+        '--read_length 151 '
         '-X 4 '
         '-N 10000 '
-        '-o {output}'
+        '-o {output} '
+        '< {input}'
 
 rule run_lumpy:
     input:
@@ -363,19 +374,24 @@ rule run_lumpy:
         disc = rules.extract_discordant.output.bam,
         split = rules.extract_split.output.bam,
         histo = rules.lumpy_histo.output,
-        ref = COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa,
+        fai = (COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa) + '.fai',
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
     params:
-        lumpy = join(package_path(), 'lumpy', 'lumpy')
+        lumpy = join(package_path(), 'lumpy', 'lumpy'),
     group: 'lumpy'
-    shell:
-        '{params.lumpy} '
-        '-mw 4 '
-        '-tt 0 '
-        '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
-        '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
-        '> {output.vcf}'
+    run:
+        if refdata.ref_file_exists(GENOME, 'blacklist'):
+            blacklist = refdata.get_ref_file(GENOME, 'blacklist')
+            blacklist_opt = f'{f"-x {blacklist} " if isfile(blacklist) else ""}'
+        shell(
+            '{params.lumpy} '
+            '-mw 4 '
+            '-tt 0 '
+            '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
+            '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
+            '| gsort - {input.fai} > {output.vcf}'
+        )
 
 # if SV_CALLER == 'manta':
 MANTA_IMG = 'quay.io/biocontainers/manta:1.6.0--py27_0'
@@ -484,11 +500,13 @@ rule annotate_with_viral_genes:
             shell('cp {input.vcf} {output.vcf}')
         else:
             shell('bedtools intersect -a {input.vcf} -b {genes_bed} -loj > {params.overlap_tsv}')
-
             gene_by_id = defaultdict(list)
             with open(params.overlap_tsv) as f:
                 for l in f:
-                    _, _, var_id, _, _, _, _, _, _, _, _, gene = l.strip().split('\t')
+                    fields = l.strip().split('\t')
+                    var_id = fields[2]
+                    VCF_COLS = 10
+                    gene = fields[VCF_COLS]
                     gene_by_id[var_id].append(gene)
 
             def proc_rec(rec, vcf):
@@ -614,7 +632,10 @@ if GTF_PATH:
             gene_by_id = defaultdict(list)
             with open(overlap_tsv) as f:
                 for l in f:
-                    _, _, var_id, _, _, _, _, _, chrom, _, _, start, end, _, strand, _, info = l.strip().split('\t')
+                    fields = l.strip().split('\t')
+                    var_id = fields[2]
+                    VCF_COLS = 10
+                    chrom, _, _, start, end, _, strand, _, info = fields[VCF_COLS:]
                     m = re.match(r'.*gene_name "(\S+)";.*', info)
                     if m:
                         gene = m.group(1)
