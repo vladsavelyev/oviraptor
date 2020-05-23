@@ -46,11 +46,6 @@ WORK_DIR = join(OUTPUT_DIR, 'work')
 
 SV_CALLER = 'lumpy'
 
-PY2_ENV_PATH = config.get('py2_env_path')
-py2_conda_cmd = ''
-if PY2_ENV_PATH:
-    py2_conda_cmd = 'export PATH=' + PY2_ENV_PATH + '/bin:$PATH; '
-
 GTF_PATH = config.get('gtf_file')
 if not GTF_PATH:
     pyens = refdata.get_ref_file(GENOME, key='pyensembl_data', must_exist=False)
@@ -432,6 +427,10 @@ rule run_manta:
                 f'bash -c "{tool_cmd.replace(params.work_dir, "/work")}"'
             )
         else:
+            PY2_ENV_PATH = config.get('py2_env_path')
+            py2_conda_cmd = ''
+            if PY2_ENV_PATH:
+                py2_conda_cmd = 'export PATH=' + PY2_ENV_PATH + '/bin:$PATH; '
             shell(f'{py2_conda_cmd} {tool_cmd}')
 
 if SV_CALLER == 'manta':
