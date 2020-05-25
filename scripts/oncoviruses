@@ -107,8 +107,8 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
     if py2_env_path:
         conf['py2_env_path'] = py2_env_path
 
-    run_snakemake(join(package_path(), "workflow.smk"), conf, output_dir=output_dir,
-                  cores=cores, unlock=unlock, dryrun=dryrun)
+    run_snakemake(join(package_path(), "workflow.smk"), conf, cores=cores, output_dir=output_dir,
+                  unlock=unlock, dryrun=dryrun)
 
     result_path = join(output_dir, 'breakpoints.vcf.gz')
     prio_tsv = join(output_dir, 'prioritized_oncoviruses.tsv')
