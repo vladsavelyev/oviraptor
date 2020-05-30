@@ -505,13 +505,13 @@ rule annotate_with_viral_genes:
                     fields = l.strip().split('\t')
                     var_id = fields[2]
                     VCF_COLS = 10
-                    gene = fields[VCF_COLS]
+                    chrom, start, end, gene = fields[VCF_COLS:VCF_COLS+4]
                     gene_by_id[var_id].append(gene)
 
             def proc_rec(rec, vcf):
                 genes = [g for g in
                          gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
-                         if g != '.']
+                         if g != '.' and g is not None]
                 if genes:
                     rec.INFO['ViralGenes'] = ','.join(genes)
                 return rec
@@ -639,7 +639,6 @@ if GTF_PATH:
                     if m:
                         gene = m.group(1)
                         gene_by_id[var_id].append(gene)
-            print(gene_by_id)
             def proc_rec(rec, vcf):
                 genes = [g for g in
                          gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
