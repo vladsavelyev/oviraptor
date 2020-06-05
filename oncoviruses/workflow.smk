@@ -338,14 +338,14 @@ rule extract_split:
 
 rule lumpy_histo_samtools_view:
     input:
-        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
+        bam = INPUT_BAM,
     output:
         join(WORK_DIR, 'step8_{virus}_lumpy/reads.sam')
     params:
         pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py')
     group: 'lumpy'
     shell:
-        'samtools view -r {SAMPLE} {input.bam} > {output}'
+        'samtools view -r {SAMPLE} {input.bam} | head -n10000 > {output}'
 
 rule lumpy_histo:
     input:
