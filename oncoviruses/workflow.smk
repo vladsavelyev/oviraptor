@@ -336,32 +336,39 @@ rule extract_split:
         '| {params.extractSplitReads} -i stdin '
         '| samtools sort -Obam -o {output.bam}'
 
-rule lumpy_histo_samtools_view:
+rule lumpy_histo_bam_subset:
     input:
         bam = INPUT_BAM,
     output:
-        join(WORK_DIR, 'step8_{virus}_lumpy/reads.sam')
+        bam = join(WORK_DIR, 'step8_{virus}_lumpy/10kreads.bam')
     params:
         pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py')
     group: 'lumpy'
-    shell:
-        'samtools view -r {SAMPLE} {input.bam} | head -n10000 > {output}'
+    run:
+        import pysam
+        inp_bam = pysam.AlignmentFile(input.bam, 'rb')
+        out_bam = pysam.AlignmentFile(output.bam, 'wb', template=inp_bam)
+        for i, read in enumerate(inp_bam):
+            if i < 10000:
+                out_bam.write(read)
+            else:
+                break
 
 rule lumpy_histo:
     input:
-        join(WORK_DIR, 'step8_{virus}_lumpy/reads.sam')
+        join(WORK_DIR, 'step8_{virus}_lumpy/10kreads.bam')
     output:
         join(WORK_DIR, 'step8_{virus}_lumpy/histo.txt')
     params:
         pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py')
     group: 'lumpy'
     shell:
+        'samtools view {input} | '
         'python {params.pairend_distro} '
         '--read_length 151 '
         '-X 4 '
         '-N 10000 '
-        '-o {output} '
-        '< {input}'
+        '-o {output}'
 
 rule run_lumpy:
     input:

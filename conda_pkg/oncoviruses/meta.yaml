@@ -29,6 +29,7 @@ requirements:
     - ngs_utils >=2.7.0
     - reference_data
     - gsort
+    - pysam
 
 test:
   commands:
