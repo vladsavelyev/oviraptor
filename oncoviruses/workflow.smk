@@ -146,8 +146,8 @@ if not VIRUSES:
             else:
                 shell(mosdepth_cmd)
 
-    MIN_SIGNIFICANT_COMPLETENESS = 0.5  # 50% of the virus must be covered at at least <completeness_threshold>
-    COMPLETENESS_THRESHOLD = '5x'       #  5x coverage is required for <min_significant_completeness>
+    MIN_SIGNIFICANT_COMPLETENESS = 0.3  #  % of the virus must be covered at at least <completeness_threshold>
+    COMPLETENESS_THRESHOLD = '5x'       #  x coverage required for <min_significant_completeness>
     ONCOVIRAL_SOURCE_URL = 'https://gdc.cancer.gov/about-data/data-harmonization-and-generation/gdc-reference-files'
     rule prioritize_viruses:
         input:
@@ -178,7 +178,8 @@ if not VIRUSES:
                 for l in f:
                     if not l.startswith('#'):
                         virus, size, depth, t1, t5, t25, significance = l.strip().split('\t')
-                        # at least 50% of a virus covered with at least 5x reads:
+                        # at least <MIN_SIGNIFICANT_COMPLETENESS>% of a virus covered with
+                        # at least <COMPLETENESS_THRESHOLD>x reads:
                         if significance != '.':
                             viruses.append(virus)
             if not viruses:
@@ -224,7 +225,7 @@ rule bwa_unmapped_and_mateunmapped_to_viral_ref:
         " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
 
 
-# Extracts reads with at least 50 softclipped base stretches.
+# Extracts reads with at least 50 soft-clipped base stretches.
 # E.g. 50 bases are represented in CIGAR with 50S. So we should look for
 # any 3 digit numbers, or 2 digit numbers starting with 5..9:
 sambamba_softclip_expr = '(cigar =~ /\d{3,}S/ or cigar =~ /[56789]\dS/) and not supplementary'
