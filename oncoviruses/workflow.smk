@@ -102,9 +102,15 @@ if not VIRUSES:
         threads: THREADS
         params:
             rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
-        shell:
-            "bwa mem -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2} "
-            " | samtools sort -@{threads} -Obam -o {output.gdc_bam}"
+        run:
+            for i in range(0, 100):
+                tmp_bam = output.gdc_bam + '.tmp.{:0>4d}.bam'.format(i)
+                if isfile(tmp_bam):
+                    os.system(f'rm {tmp_bam}')
+                else:
+                    break
+            shell("bwa mem -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2} "
+                  " | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
 
     rule index_virus_bam:
         input:
