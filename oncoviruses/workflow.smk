@@ -164,7 +164,7 @@ if not VIRUSES:
             "paste <(gunzip -c {input.mosdepth_regions_bed_gz}) <(zgrep -v ^# {input.mosdepth_thresholds_bed_gz}) | "
             "awk 'BEGIN {{FS=\"\\t\"}} {{ printf(\"%s\\t%d\\t%3.1f\\t%3.3f\\t%3.3f\\t%3.3f\\t%s\\n\", "
             "$1 ,$3, $4, $10/$3, $11/$3, $12/$3, (($11/$3>{MIN_SIGNIFICANT_COMPLETENESS}) ? \"significant\" : \".\")) }}' | "
-            "sort -n -r -k 5,5 >> {output.oncoviruses_tsv}"
+            "sort -n -r -k5,5 -k6,6 -k4,4 -k3,3 >> {output.oncoviruses_tsv}"
 
     checkpoint select_viruses:
         input:
