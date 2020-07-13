@@ -467,6 +467,41 @@ rule filter_vcf:
 # bcftools doesn't work with 4th columns in bed
 # vcfanno doesn't work when mulitple genes overlaping one variant
 # so using bedtools intersect plus a cyvcf2 loop
+def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_name, anno_desc):
+    overlap_tsv = join(work_dir, 'overlap.tsv')
+    shell(f'bedtools intersect -a {vcf_path} -b {genes_path} -loj > {overlap_tsv}')
+    gene_by_id = defaultdict(list)
+    with open(overlap_tsv) as f:
+        for l in f:
+            fields = l.strip().split('\t')
+            var_id = fields[2]
+            VCF_COL_NUM = 10
+            gene = None
+            if genes_path.endswith('.bed') or genes_path.endswith('.bed.gz'):
+                chrom, start, end, gene = fields[VCF_COL_NUM:VCF_COL_NUM+4]
+            else:  # GTF
+                chrom, _, _, start, end, _, strand, _, info = fields[VCF_COL_NUM:]
+                m = re.match(r'.*gene_name "(\S+)";.*', info)
+                if m:
+                    gene = m.group(1)
+            if gene:
+                gene_by_id[var_id].append(gene)
+
+    def proc_rec(rec, vcf):
+        genes = [g for g in
+                 gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
+                 if g != '.' and g is not None]
+        if genes:
+            rec.INFO[anno_name] = ','.join(genes)
+        return rec
+    def proc_hdr(vcf):
+        add_cyvcf2_hdr(vcf, anno_name, '.', 'String', anno_desc)
+    iter_vcf(vcf_path, output_vcf_path, proc_rec=proc_rec, proc_hdr=proc_hdr)
+
+    before = count_vars(vcf_path)
+    after = count_vars(output_vcf_path)
+    assert before == after, (before, after)
+
 rule annotate_with_viral_genes:
     input:
         vcf = rules.filter_vcf.output.vcf,
@@ -475,87 +510,16 @@ rule annotate_with_viral_genes:
         vcf = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz'),
         tbi = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz.tbi'),
     params:
-        overlap_tsv = join(WORK_DIR, 'step10_{virus}_viral_genes/overlap.tsv')
+        work_dir = join(WORK_DIR, 'step10_{virus}_viral_genes')
     run:
         genes_bed = join(package_path(), 'data', f'{wildcards.virus}.bed')
         if not isfile(genes_bed):
             warn(f'No genes data for virus {wildcards.virus}, skipping annotation')
             shell('cp {input.vcf} {output.vcf}')
         else:
-            shell('bedtools intersect -a {input.vcf} -b {genes_bed} -loj > {params.overlap_tsv}')
-            gene_by_id = defaultdict(list)
-            with open(params.overlap_tsv) as f:
-                for l in f:
-                    fields = l.strip().split('\t')
-                    var_id = fields[2]
-                    VCF_COLS = 10
-                    chrom, start, end, gene = fields[VCF_COLS:VCF_COLS+4]
-                    gene_by_id[var_id].append(gene)
-
-            def proc_rec(rec, vcf):
-                genes = [g for g in
-                         gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
-                         if g != '.' and g is not None]
-                if genes:
-                    rec.INFO['ViralGenes'] = ','.join(genes)
-                return rec
-            def proc_hdr(vcf):
-                add_cyvcf2_hdr(vcf, 'ViralGenes', '.', 'String',
-                               'Viral genes that this breakpoint overlaps (and likely disrupts)')
-            iter_vcf(input.vcf, output.vcf, proc_rec=proc_rec, proc_hdr=proc_hdr)
-
-        before = count_vars(input.vcf)
-        after = count_vars(output.vcf)
-        assert before == after, (before, after)
-
-# rule annotate_with_host_genes:
-#     # Annotate with oncogenes within 100 kbp upstream
-#     # https://www.biorxiv.org/content/10.1101/2020.02.12.942755v1: significant changes in CTCF binding pattern
-#     # and increases in chromatin accessibility occurred exclusively within 100 kbp of HPV integration sites.
-#     input:
-#         vcf = rules.annotate_with_viral_genes.output.vcf,
-#         key_genes_bed = get_key_genes_bed(GENOME),
-#         # coding_regions_bed = hpc.get_ref_file(GENOME, key='coding_regions'),
-#         fai = COMBINED_FA + '.fai',
-#     output:
-#         vcf = join(WORK_DIR, 'step11_{virus}_host_genes/breakpoints.genes.host_cancer_genes.vcf.gz'),
-#     params:
-#         work_dir = join(WORK_DIR, 'step11_{virus}_host_genes'),
-#         bases_upstream = 100_000,
-#     run:
-#         # pad genes by 100kb
-#         overlap_tsv = join(params.work_dir, 'overlap.tsv')
-#         slopped_bed = join(params.work_dir, 'key_genes_sloped.bed')
-#         # -l - The number of base pairs to subtract from the start coordinate
-#         # -s - Define -l and -r based on strand
-#         shell('bedtools slop -i {input.key_genes_bed} -l {params.bases_upstream} -s -g {input.fai} > {slopped_bed}')
-#         # intersect with variants
-#         shell('bedtools intersect -a {input.vcf} -b {slopped_bed} -loj > {overlap_tsv}')
-#
-#         gene_by_id = defaultdict(list)
-#         with open(overlap_tsv) as f:
-#             for l in f:
-#                 _, _, var_id, _, _, _, _, _, _, _, _, gene = l.strip().split('\t')
-#                 gene_by_id[var_id].append(gene)
-#
-#         def proc_rec(rec, vcf):
-#             genes = [g for g in
-#                      gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
-#                      if g != '.']
-#             if genes:
-#                 rec.INFO[f'CancerGenesWithin{params.bases_upstream // 1000}kb'] = ','.join(genes)
-#             return rec
-#         def proc_hdr(vcf):
-#             add_cyvcf2_hdr(vcf, f'CancerGenesWithin{params.bases_upstream // 1000}kb', '.', 'String',
-#                           f'Cancer genes that start within the {params.bases_upstream // 1000}kb distance '
-#                           f'of the breakpoint. Based on https://www.biorxiv.org/content/10.1101/2020.02.12.942755v1, '
-#                           f'that reported significant increases in chromatin accessibility exclusively '
-#                           f'within 100 kbp of HPV integration sites.')
-#         iter_vcf(input.vcf, output.vcf, proc_rec=proc_rec, proc_hdr=proc_hdr)
-#
-#         before = count_vars(input.vcf)
-#         after = count_vars(output.vcf)
-#         assert before == after, (before, after)
+            overlap_with_genes(input.vcf, output.vcf, genes_bed, params.work_dir,
+                'ViralGenes',
+                'Viral genes that this breakpoint overlaps (and likely disrupts)')
 
 last_vcf_rule = rules.annotate_with_viral_genes
 
@@ -568,7 +532,6 @@ if GTF_PATH:
             gtf = join(WORK_DIR, 'step11_{virus}_host_genes/hg38_noalt.genes.gtf'),
         params:
             work_dir = join(WORK_DIR, 'step11_{virus}_host_genes'),
-            bases_upstream = 100_000,
         run:
             # in order to pad genes by 100kb, we first need to subset the GTF to main chromosomes, and
             # remove chr prefixes from the fai file for bedtools.
@@ -581,15 +544,32 @@ if GTF_PATH:
             shell("bedtools intersect -a {input.gtf_path} -b {grch38_noalt_bed}"
                   " | grep -w gene | sed 's/^MT/M/' | sed 's/^/chr/' > {output.gtf}")
 
+    rule annotate_with_disrupted_host_genes:
+        input:
+            vcf = rules.annotate_with_viral_genes.output.vcf,
+            gtf = rules.prep_gtf.output.gtf,
+            fai = COMBINED_FA + '.fai',
+        output:
+            vcf = join(WORK_DIR, 'step11_{virus}_host_genes/breakpoints.annotated.vcf.gz'),
+        params:
+            work_dir = join(WORK_DIR, 'step11_{virus}_host_genes'),
+        run:
+            overlap_with_genes(input.vcf, output.vcf, input.gtf, params.work_dir,
+                'DisruptedGenes',
+                'Host genes overlapping the breakpoint, that are probably disrupted '
+                'by the viral integration event')
+
+    HOST_GENES_BASES_UPSTREAM = 100_000
+
     rule slop_gtf:
         input:
             gtf = rules.prep_gtf.output.gtf,
             fai = COMBINED_FA + '.fai',
         output:
-            gtf = join(WORK_DIR, 'step11_{virus}_host_genes/hg38_noalt.genes.slopped.gtf'),
+            gtf = join(WORK_DIR, 'step12_{virus}_host_genes/hg38_noalt.genes.slopped.gtf'),
         params:
-            work_dir = join(WORK_DIR, 'step11_{virus}_host_genes'),
-            bases_upstream = 100_000,
+            work_dir = join(WORK_DIR, 'step12_{virus}_host_genes'),
+            bases_upstream = HOST_GENES_BASES_UPSTREAM,
         shell:
             # pad genes by 100kb
             # -l - The number of base pairs to subtract from the start coordinate
@@ -597,64 +577,25 @@ if GTF_PATH:
             'bedtools slop -i {input.gtf} -l {params.bases_upstream} -r 0 -s -g {input.fai}'
             ' > {output.gtf}'
 
-    rule annotate_with_host_genes_all:
+    rule annotate_with_host_genes_upstream:
         input:
             vcf = rules.annotate_with_viral_genes.output.vcf,
             gtf = rules.slop_gtf.output.gtf,
             fai = COMBINED_FA + '.fai',
         output:
-            vcf = join(WORK_DIR, 'step11_{virus}_host_genes/breakpoints.genes.host_cancer_genes.vcf.gz'),
+            vcf = join(WORK_DIR, 'step12_{virus}_host_genes/breakpoints.genes.host_cancer_genes.vcf.gz'),
         params:
-            work_dir = join(WORK_DIR, 'step11_{virus}_host_genes'),
-            bases_upstream = 100_000,
+            work_dir = join(WORK_DIR, 'step12_{virus}_host_genes'),
+            bases_upstream = HOST_GENES_BASES_UPSTREAM,
         run:
-            # intersect with variants
-            overlap_tsv = join(params.work_dir, 'overlap.tsv')
-            shell('bedtools intersect -a {input.vcf} -b {input.gtf} -loj > {overlap_tsv}')
+            overlap_with_genes(input.vcf, output.vcf, input.gtf, params.work_dir,
+                f'GenesWithin{params.bases_upstream // 1000}kb',
+                f'Genes that start within the {params.bases_upstream // 1000}kb distance '
+                f'of the breakpoint. Based on https://www.biorxiv.org/content/10.1101/2020.02.12.942755v1, '
+                f'that reported significant increases in chromatin accessibility exclusively '
+                f'within 100 kbp of HPV integration sites.')
 
-            gene_by_id = defaultdict(list)
-            with open(overlap_tsv) as f:
-                for l in f:
-                    fields = l.strip().split('\t')
-                    var_id = fields[2]
-                    VCF_COLS = 10
-                    chrom, _, _, start, end, _, strand, _, info = fields[VCF_COLS:]
-                    m = re.match(r'.*gene_name "(\S+)";.*', info)
-                    if m:
-                        gene = m.group(1)
-                        gene_by_id[var_id].append(gene)
-            def proc_rec(rec, vcf):
-                genes = [g for g in
-                         gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
-                         if g != '.']
-                if genes:
-                    rec.INFO[f'GenesWithin{params.bases_upstream // 1000}kb'] = ','.join(genes)
-                return rec
-
-            # def proc_rec(rec, vcf):
-            #     plus_stranded_genes_100kbp_upstream = ebl.gene_names_at_locus(
-            #         contig = rec.CHROM, position = rec.POS - 100_000, end = rec.POS, strand = '+')
-            #     minus_stranded_genes_100kbp_downstream = ebl.gene_names_at_locus(
-            #         contig = rec.CHROM, position = rec.POS, end = rec.POS + 100_000, strand = '-')
-            #
-            #     genes = plus_stranded_genes_100kbp_upstream + minus_stranded_genes_100kbp_downstream
-            #     if genes:
-            #         rec.INFO[f'CancerGenesWithin{params.bases_upstream // 1000}kb'] = ','.join(genes)
-            #     return rec
-
-            def proc_hdr(vcf):
-                add_cyvcf2_hdr(vcf, f'GenesWithin{params.bases_upstream // 1000}kb', '.', 'String',
-                              f'Genes that start within the {params.bases_upstream // 1000}kb distance '
-                              f'of the breakpoint. Based on https://www.biorxiv.org/content/10.1101/2020.02.12.942755v1, '
-                              f'that reported significant increases in chromatin accessibility exclusively '
-                              f'within 100 kbp of HPV integration sites.')
-            iter_vcf(input.vcf, output.vcf, proc_rec=proc_rec, proc_hdr=proc_hdr)
-
-            before = count_vars(input.vcf)
-            after = count_vars(output.vcf)
-            assert before == after, (before, after)
-
-    last_vcf_rule = rules.annotate_with_host_genes_all
+    last_vcf_rule = rules.annotate_with_host_genes_upstream
 
 def merge_viruses_input_fn(wildcards):
     if not VIRUSES:
@@ -678,4 +619,3 @@ rule merged_viruses:
             else:
                 shell('cp {input} {output}')
             shell('tabix -p vcf {output}')
-
