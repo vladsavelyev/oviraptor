@@ -152,8 +152,9 @@ if not VIRUSES:
             else:
                 shell(mosdepth_cmd)
 
-    MIN_SIGNIFICANT_COMPLETENESS = 0.3  #  % of the virus must be covered at at least <completeness_threshold>
-    COMPLETENESS_THRESHOLD = '5x'       #  x coverage required for <min_significant_completeness>
+    # we need at least one of these conditions to call significance:
+    MIN_1x_PCT = 50.0  #  % of the viral sequence that must be covered at at least 1x (probably non-integrating)
+    MIN_5x_LEN = 200   #  viral base pairs must be covered at at least 5x (which is amplified, thus integrating)
     ONCOVIRAL_SOURCE_URL = 'https://gdc.cancer.gov/about-data/data-harmonization-and-generation/gdc-reference-files'
     rule prioritize_viruses:
         input:
@@ -161,15 +162,16 @@ if not VIRUSES:
             mosdepth_thresholds_bed_gz = rules.mosdepth.output.mosdepth_thresholds_bed_gz,
         output:
             oncoviruses_tsv = PRIO_TSV,
+        params:
+            completeness_share = MIN_1x_PCT / 100.0
         shell:
             "echo '## Viral sequences (from {ONCOVIRAL_SOURCE_URL}) found in unmapped reads' > {output.oncoviruses_tsv} &&"
             "echo '## Sample: {SAMPLE}' >> {output.oncoviruses_tsv} && "
-            "echo '## Significant completeness: {MIN_SIGNIFICANT_COMPLETENESS}' >> {output.oncoviruses_tsv} && "
-            "echo '## Significant coverage: {COMPLETENESS_THRESHOLD}' >> {output.oncoviruses_tsv} && "
+            "echo '## Minimal completeness: {MIN_1x_PCT}% at 1x or {MIN_5x_LEN}bp at 5x' >> {output.oncoviruses_tsv} && "
             "echo '#virus\tsize\tdepth\t1x\t5x\t25x\tsignificance' >> {output.oncoviruses_tsv} && "
             "paste <(gunzip -c {input.mosdepth_regions_bed_gz}) <(zgrep -v ^# {input.mosdepth_thresholds_bed_gz}) | "
             "awk 'BEGIN {{FS=\"\\t\"}} {{ printf(\"%s\\t%d\\t%3.1f\\t%3.3f\\t%3.3f\\t%3.3f\\t%s\\n\", "
-            "$1 ,$3, $4, $10/$3, $11/$3, $12/$3, (($11/$3>{MIN_SIGNIFICANT_COMPLETENESS}) ? \"significant\" : \".\")) }}' | "
+            "$1, $3, $4, $10/$3, $11/$3, $12/$3, (($11>{MIN_5x_LEN} || $11/$3>{params.completeness_share}) ? \"significant\" : \".\")) }}' | "
             "sort -n -r -k5,5 -k6,6 -k4,4 -k3,3 >> {output.oncoviruses_tsv}"
 
     checkpoint select_viruses:
@@ -184,8 +186,6 @@ if not VIRUSES:
                 for l in f:
                     if not l.startswith('#'):
                         virus, size, depth, t1, t5, t25, significance = l.strip().split('\t')
-                        # at least <MIN_SIGNIFICANT_COMPLETENESS>% of a virus covered with
-                        # at least <COMPLETENESS_THRESHOLD>x reads:
                         if significance != '.':
                             viruses.append(virus)
             if not viruses:
