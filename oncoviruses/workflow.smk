@@ -464,36 +464,6 @@ rule filter_vcf:
         "bcftools filter -e \"IMPRECISE=1\" -Oz -o {output.vcf}"
         " && tabix -p vcf {output.vcf}"
 
-# rule snpeff:
-#     input:
-#         vcf = rules.filter_vcf.output.vcf,
-#     output:
-#         vcf = join(WORK_DIR, 'step10_{virus}_snpeff/breakpoints.eff.vcf.gz')
-#     params:
-#         genome = GENOME,
-#         tmp_dir = join(WORK_DIR, 'step10_{virus}_snpeff', 'tmp'),
-#         csv  = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.csv'),
-#         html = join(WORK_DIR, 'step10_{virus}_snpeff', 'snpeff-stats.html'),
-#     resources:
-#         mem_mb = 2000
-#     run:
-#         safe_mkdir(params.tmp_dir)
-#         snpeff_db = hpc.get_ref_file(genome=params.genome, key='snpeff')
-#         snpeff_db_dir = dirname(snpeff_db)
-#         assert params.genome == 'hg38', 'Only hg38 is suported for snpEff'
-#         snpeff_db_name = 'GRCh38.86'  # for some reason it doesn't matter if the subdir is named GRCh38.92
-#
-#         jvm_opts = f'-Xms750m -Xmx4g'
-#         java_args = f'-Djava.io.tmpdir={params.tmp_dir}'
-#
-#         shell('snpEff {jvm_opts} {java_args} '
-#               '-dataDir {snpeff_db_dir} {snpeff_db_name} '
-#               '-hgvs -cancer -i vcf -o vcf '
-#               '-csvStats {params.csv} -s {params.html} '
-#               '{input.vcf} '
-#               '| bgzip -c > {output.vcf} && tabix -p vcf {output.vcf}')
-#         verify_file(output.vcf, is_critical=True)
-
 # bcftools doesn't work with 4th columns in bed
 # vcfanno doesn't work when mulitple genes overlaping one variant
 # so using bedtools intersect plus a cyvcf2 loop
@@ -685,14 +655,6 @@ if GTF_PATH:
             assert before == after, (before, after)
 
     last_vcf_rule = rules.annotate_with_host_genes_all
-
-# rule tabix_result_vcf:
-#     input:
-#         vcf = rules.annotate_with_host_genes.output.vcf
-#     output:
-#         tbi = rules.annotate_with_host_genes.output.vcf + '.tbi'
-#     shell:
-#         'tabix -p vcf {input}'
 
 def merge_viruses_input_fn(wildcards):
     if not VIRUSES:
