@@ -154,7 +154,7 @@ if not VIRUSES:
 
     # we need at least one of these conditions to call significance:
     MIN_1x_PCT = 50.0  #  % of the viral sequence that must be covered at at least 1x (probably non-integrating)
-    MIN_5x_LEN = 200   #  viral base pairs must be covered at at least 5x (which is amplified, thus integrating)
+    MIN_5x_LEN = 300   #  viral base pairs must be covered at at least 5x (which is amplified, thus integrating)
     ONCOVIRAL_SOURCE_URL = 'https://gdc.cancer.gov/about-data/data-harmonization-and-generation/gdc-reference-files'
     rule prioritize_viruses:
         input:
@@ -171,7 +171,7 @@ if not VIRUSES:
             "echo '#virus\tsize\tdepth\t1x\t5x\t25x\tsignificance' >> {output.oncoviruses_tsv} && "
             "paste <(gunzip -c {input.mosdepth_regions_bed_gz}) <(zgrep -v ^# {input.mosdepth_thresholds_bed_gz}) | "
             "awk 'BEGIN {{FS=\"\\t\"}} {{ printf(\"%s\\t%d\\t%3.1f\\t%3.3f\\t%3.3f\\t%3.3f\\t%s\\n\", "
-            "$1, $3, $4, $10/$3, $11/$3, $12/$3, (($11>{MIN_5x_LEN} || $11/$3>{params.completeness_share}) ? \"significant\" : \".\")) }}' | "
+            "$1, $3, $4, $9/$3, $10/$3, $11/$3, (($10>{MIN_5x_LEN} || $11/$3>{params.completeness_share}) ? \"significant\" : \".\")) }}' | "
             "sort -n -r -k5,5 -k6,6 -k4,4 -k3,3 >> {output.oncoviruses_tsv}"
 
     checkpoint select_viruses:
