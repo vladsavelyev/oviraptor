@@ -384,19 +384,18 @@ rule run_lumpy:
         split = rules.extract_split.output.bam,
         histo = rules.lumpy_histo.output,
         fai = (COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa) + '.fai',
+        blacklist = join(package_path(), 'data', 'encode4_unified_blacklist.bed.gz'),
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
     params:
         lumpy = join(package_path(), 'lumpy', 'lumpy'),
     group: 'lumpy'
     run:
-        if refdata.ref_file_exists(GENOME, 'blacklist'):
-            blacklist = refdata.get_ref_file(GENOME, 'blacklist')
-            blacklist_opt = f'{f"-x {blacklist} " if isfile(blacklist) else ""}'
         shell(
             '{params.lumpy} '
             '-mw 4 '
             '-tt 0 '
+            '-x {input.blacklist} '
             '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
             '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
             '| gsort - {input.fai} > {output.vcf}'
