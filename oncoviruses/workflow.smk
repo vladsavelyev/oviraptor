@@ -390,16 +390,60 @@ rule run_lumpy:
         vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
     params:
         lumpy = join(package_path(), 'lumpy', 'lumpy'),
+        image = 'quay.io/biocontainers/lumpy-sv:0.3.0--h0b85cd1_0'
     group: 'lumpy'
-    shell:
-        '{params.lumpy} '
-        '-mw 4 '
-        '-tt 0 '
-        '-x {input.blacklist} '
-        '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,'
-        'min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
-        '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
-        '| gsort - {input.fai} > {output.vcf}'
+    run:
+        tool_cmd = (
+            '-mw 4 '
+            '-tt 0 '
+            '-x {input.blacklist} '
+            '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,'
+            'min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
+            '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
+            '> {output.vcf}'
+        )
+        if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
+            volumes_dict = dict()
+            for inp_path in input:
+                volumes_dict[dirname(inp_path)] = dirname(inp_path)
+            volumes_arg = " ".join(f"-v{k}:{v}" for k, v in volumes_dict.items())
+            shell(
+                f'docker run ' 
+                f'{volumes_arg} '
+                f'{params.image} '
+                f'bash -c "lumpy {tool_cmd}"'
+            )
+        else:
+            shell('{params.lumpy} {tool_cmd}')
+
+# - gsort is not working because it sorts the header and puts the first line
+# in the VCF in the middle, leading to downstream failues
+# 0 bcftools requires all contigs to be definded in the header and not working as well
+rule sort_vcf:
+    input:
+        vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
+        fai = rules.create_combined_reference.output.combined_fa + '.fai',
+    output:
+        vcf = join(WORK_DIR, 'step9_{virus}_lumpy.sorted.vcf'),
+    run:
+        sort_order = dict()
+        with open(input.fai) as f:
+            for i, l in enumerate(f):
+                chrom = l.split('\t')[0]
+                sort_order[chrom] = i
+        hdr_lines = []
+        rec_split_lines = []
+        with open(input.vcf) as f:
+            for l in f:
+                if l.startswith('#'):
+                    hdr_lines.append(l)
+                else:
+                    rec_split_lines.append(l.strip().split('\t'))
+        with open(output.vcf, 'w') as f:
+            for l in hdr_lines:
+                f.write(l)
+            for fields in sorted(rec_split_lines, key=lambda fs: (sort_order[fs[0]], int(fs[1]))):
+                f.write('\t'.join(fields) + '\n')
 
 rule run_manta:
     input:
@@ -455,8 +499,8 @@ rule filter_vcf:
     input:
         vcf = sv_output_rule.output.vcf
     output:
-        vcf = join(WORK_DIR, 'step9_{virus}_manta_filter/breakpoints.vcf.gz'),
-        tbi = join(WORK_DIR, 'step9_{virus}_manta_filter/breakpoints.vcf.gz.tbi'),
+        vcf = join(WORK_DIR, 'step10_{virus}_manta_filter/breakpoints.vcf.gz'),
+        tbi = join(WORK_DIR, 'step10_{virus}_manta_filter/breakpoints.vcf.gz.tbi'),
     shell:
         "bcftools view {input.vcf} | "
         "egrep -e '^#|{wildcards.virus}' | "
@@ -499,8 +543,8 @@ rule annotate_with_viral_genes:
         vcf = rules.filter_vcf.output.vcf,
         tbi = rules.filter_vcf.output.tbi,
     output:
-        vcf = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz'),
-        tbi = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz.tbi'),
+        vcf = join(WORK_DIR, 'step11_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz'),
+        tbi = join(WORK_DIR, 'step11_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz.tbi'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf)
     run:
@@ -557,7 +601,7 @@ rule annotate_with_disrupted_host_genes:
         bed = host_genes_bed,
         fai = COMBINED_FA + '.fai',
     output:
-        vcf = join(WORK_DIR, 'step11_{virus}_host_genes_disrupted/breakpoints.annotated.vcf.gz'),
+        vcf = join(WORK_DIR, 'step12_{virus}_host_genes_disrupted/breakpoints.annotated.vcf.gz'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf)
     run:
@@ -590,7 +634,7 @@ rule annotate_with_host_genes_upstream:
         bed = rules.slop_host_bed.output.bed,
         fai = COMBINED_FA + '.fai',
     output:
-        vcf = join(WORK_DIR, 'step12_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
+        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf),
         bases_upstream = HOST_GENES_BASES_UPSTREAM,
