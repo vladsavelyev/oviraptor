@@ -39,7 +39,8 @@ COMBINED_FA = config.get('combined_fa') or \
 HOST_FA = config.get('host_fa') or \
     refdata.get_ref_file(genome=GENOME, key='fa', must_exist=False)
 VIRUSES_FA = config.get('viruses_fa') or \
-    refdata.get_ref_file(genome=GENOME, key='gdc_viral_fa', must_exist=False)
+    refdata.get_ref_file(genome=GENOME, key='gdc_viral_fa', must_exist=False) or \
+    join(package_path(), 'data', 'gdc-viral.fa')
 assert VIRUSES_FA and (COMBINED_FA or HOST_FA)
 
 WORK_DIR = join(OUTPUT_DIR, 'work')

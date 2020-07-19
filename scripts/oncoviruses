@@ -25,7 +25,7 @@ from oncoviruses import package_path
                    'then with `--virus <detected_virus>`')
 
 # Reference: either --viruses-fa and (--host-fa or --combined-reference) explicitly, or --genomes and optional -g
-@click.option('--gtf', 'gtf_file', help='Path to a GTF file for host genes annotations')
+@click.option('--gtf', '--host-gtf', 'gtf_file', help='Path to a GTF file for host genes annotations')
 @click.option('--host-fa', 'host_fa', help='Path to host reference (e.g. hg38.fa)')
 @click.option('--viruses-fa', 'viruses_fa',
               help='Path to viral sequences bwa index prefix (e.g. gdc-viral.fa from bcbio bundle)')
