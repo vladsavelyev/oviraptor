@@ -3,63 +3,54 @@ from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
 import subprocess
 import glob
-import re
-from ngs_utils.file_utils import which, safe_mkdir, verify_file, get_ungz_gz
+
+from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz
 from ngs_utils.logger import warn, critical
-from ngs_utils.vcf_utils import add_cyvcf2_hdr
-from ngs_utils.reference_data import get_key_genes_bed
-from ngs_utils.vcf_utils import count_vars, vcf_contains_field, iter_vcf
-from reference_data import api as refdata
+from ngs_utils.vcf_utils import count_vars
 from oncoviruses import package_path
 
 
 #############################
 #### Reading parameters #####
-
+## Inputs
 INPUT_BAM = config['input_bam']
 OUTPUT_DIR = abspath(config['output_dir'])
 RESULT_PATH = join(OUTPUT_DIR, 'breakpoints.vcf.gz')
 PRIO_TSV = join(OUTPUT_DIR, 'prioritized_oncoviruses.tsv')
 
-
+## Other parameters
 SAMPLE = config['sample_name']
+THREADS = config.get('cores', 10)
+SV_CALLER = 'lumpy'
+WORK_DIR = join(OUTPUT_DIR, 'work')
+
 VIRUSES = config.get('viruses', None)
 if VIRUSES:
     VIRUSES = [v.upper() for v in VIRUSES.split(',')]
 ONLY_DETECT = config.get('only_detect', False)
 
-THREADS = config.get('cores', 10)
-
-if config.get('genomes_dir'):
-    refdata.find_genomes_dir(config.get('genomes_dir'))
-
+## Reference files
 GENOME = 'hg38'
-COMBINED_FA = config.get('combined_fa') or \
-    refdata.get_ref_file(genome=GENOME, key='fa_plus_gdc_viruses', must_exist=False)
-HOST_FA = config.get('host_fa') or \
-    refdata.get_ref_file(genome=GENOME, key='fa', must_exist=False)
-VIRUSES_FA = config.get('viruses_fa') or \
-    refdata.get_ref_file(genome=GENOME, key='gdc_viral_fa', must_exist=False) or \
-    join(package_path(), 'data', 'gdc-viral.fa')
+COMBINED_FA = config.get('combined_fa')
+HOST_FA = config.get('host_fa')
+VIRUSES_FA = config.get('viruses_fa')
+pyens = None
+try:
+    from reference_data import api as refdata
+except:
+    pass
+else:
+    if config.get('genomes_dir'):
+        refdata.find_genomes_dir(config.get('genomes_dir'))
+    COMBINED_FA = COMBINED_FA or refdata.get_ref_file(genome=GENOME, key='fa_plus_gdc_viruses', must_exist=False)
+    HOST_FA     = HOST_FA     or refdata.get_ref_file(genome=GENOME, key='fa', must_exist=False)
+    VIRUSES_FA  = VIRUSES_FA  or refdata.get_ref_file(genome=GENOME, key='gdc_viral_fa', must_exist=False)
+VIRUSES_FA = VIRUSES_FA or join(package_path(), 'data', 'gdc-viral.fa')
 assert VIRUSES_FA and (COMBINED_FA or HOST_FA)
 
-WORK_DIR = join(OUTPUT_DIR, 'work')
-
-SV_CALLER = 'lumpy'
-
+# By default, using the built-in BED in package_path()/data/hg38_noalt.genes.bed.gz
+# But if the user provides the GTF file, using it instead
 GTF_PATH = config.get('gtf_file')
-if not GTF_PATH:
-    pyens = refdata.get_ref_file(GENOME, key='pyensembl_data', must_exist=False)
-    if pyens:
-        pattern = join(refdata.get_ref_file(GENOME, key='pyensembl_data', must_exist=False),
-                               'GRCh38/ensembl*/Homo_sapiens.GRCh38.*.gtf.gz')
-        found = glob.glob(pattern)
-        if not found:
-            critical(f'Could not find a GTF file in pyensembl: {pattern}')
-        GTF_PATH = found[-1]
-    else:
-        warn('GTF file not provided, skipping annotating with host genes. Use --gtf option if you want annotations.')
-
 
 rule all:
     input:
@@ -275,8 +266,9 @@ rule create_combined_reference:
         host_fa = HOST_FA,
         viruses_fa = VIRUSES_FA,
     output:
-        combined_fa = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
-        combined_bwt = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa.bwt'),
+        combined_fa   = COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
+        combined_fai = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.fai',
+        combined_bwt = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.bwt',
     shell:
         "cat {input.host_fa} {input.viruses_fa} > {output.combined_fa} && "
         "samtools faidx {output.combined_fa} && "
@@ -287,7 +279,7 @@ rule bwa_viral_bridging_to_comb_ref:
     input:
         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
-        bwa_prefix = COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa,
+        bwa_prefix = rules.create_combined_reference.output.combined_fa,
     output:
         comb_bam_possorted = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam')
     threads: THREADS
@@ -378,13 +370,14 @@ rule lumpy_histo:
         '-N 10000 '
         '-o {output}'
 
+#TODO: check why HCV-2 gets into HPV18 VCF file
+
 rule run_lumpy:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
         disc = rules.extract_discordant.output.bam,
         split = rules.extract_split.output.bam,
         histo = rules.lumpy_histo.output,
-        fai = (COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa) + '.fai',
         blacklist = join(package_path(), 'data', 'encode4_unified_blacklist.bed.gz'),
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
@@ -449,7 +442,7 @@ rule run_manta:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
         bai = rules.index_comb_ref_bam.output.bai,
-        ref = COMBINED_FA if COMBINED_FA is not None else rules.create_combined_reference.output.combined_fa,
+        ref = rules.create_combined_reference.output.combined_fa,
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
     params:
@@ -493,7 +486,7 @@ rule run_manta:
 if SV_CALLER == 'manta':
     sv_output_rule = rules.run_manta
 else:
-    sv_output_rule = rules.run_lumpy
+    sv_output_rule = rules.sort_vcf
 
 rule filter_vcf:
     input:
@@ -562,7 +555,7 @@ if GTF_PATH:  # user provided GTF file - overriding the default annotation BED
     rule prep_gtf:
         input:
             gtf_path = GTF_PATH,
-            fai = COMBINED_FA + '.fai',
+            fai = rules.create_combined_reference.output.combined_fa + '.fai',
         output:
             gtf = join(WORK_DIR, 'host_genes_prep/hg38_noalt.genes.gtf'),
         params:
@@ -599,7 +592,7 @@ rule annotate_with_disrupted_host_genes:
     input:
         vcf = rules.annotate_with_viral_genes.output.vcf,
         bed = host_genes_bed,
-        fai = COMBINED_FA + '.fai',
+        fai = rules.create_combined_reference.output.combined_fa + '.fai',
     output:
         vcf = join(WORK_DIR, 'step12_{virus}_host_genes_disrupted/breakpoints.annotated.vcf.gz'),
     params:
@@ -615,9 +608,9 @@ HOST_GENES_BASES_UPSTREAM = 100_000
 rule slop_host_bed:
     input:
         bed = host_genes_bed,
-        fai = COMBINED_FA + '.fai',
+        fai = rules.create_combined_reference.output.combined_fa + '.fai',
     output:
-         bed = join(WORK_DIR, 'host_genes_prep/hg38_noalt_genes_slopped.bed'),
+        bed = join(WORK_DIR, 'host_genes_prep/hg38_noalt_genes_slopped.bed'),
     params:
         work_dir = join(WORK_DIR, 'host_genes_prep'),
         bases_upstream = HOST_GENES_BASES_UPSTREAM,
@@ -632,7 +625,7 @@ rule annotate_with_host_genes_upstream:
     input:
         vcf = rules.annotate_with_disrupted_host_genes.output.vcf,
         bed = rules.slop_host_bed.output.bed,
-        fai = COMBINED_FA + '.fai',
+        fai = rules.create_combined_reference.output.combined_fa + '.fai',
     output:
         vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
     params:

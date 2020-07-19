@@ -9,7 +9,6 @@ from ngs_utils import logger as log
 from ngs_utils.snakemake_utils import run_snakemake
 from ngs_utils.utils import set_locale; set_locale()
 from ngs_utils import conda_utils
-from reference_data import api as refdata
 from oncoviruses import package_path
 
 
@@ -26,7 +25,7 @@ from oncoviruses import package_path
 
 # Reference: either --viruses-fa and (--host-fa or --combined-reference) explicitly, or --genomes and optional -g
 @click.option('--gtf', '--host-gtf', 'gtf_file', help='Path to a GTF file for host genes annotations')
-@click.option('--host-fa', 'host_fa', help='Path to host reference (e.g. hg38.fa)')
+@click.option('-g', '--genome', '--fa', '--host', '--host-fa', 'host_fa', help='Path to host reference (e.g. hg38.fa)')
 @click.option('--viruses-fa', 'viruses_fa',
               help='Path to viral sequences bwa index prefix (e.g. gdc-viral.fa from bcbio bundle)')
 @click.option('--combined-fa', 'combined_fa',
@@ -78,10 +77,17 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
     if only_detect:
         conf['only_detect'] = only_detect
 
-    # check reference_data can find the genomes dir, and error out if not
-    genomes_dir = refdata.find_genomes_dir(input_genomes_url)
-    if genomes_dir:
-        conf['genomes_dir'] = genomes_dir
+    genomes_dir = None
+    try:
+        from reference_data import api as refdata
+    except:
+        pass
+    else:
+        # check reference_data can find the genomes dir, and error out if not
+        genomes_dir = refdata.find_genomes_dir(input_genomes_url)
+        if genomes_dir:
+            conf['genomes_dir'] = genomes_dir
+
     if combined_fa:
         if not verify_file(combined_fa + '.bwt'):
             log.critical(f'Please, index {combined_fa} with `bwa index {combined_fa}`')
@@ -92,11 +98,9 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
         if not verify_file(viruses_fa + '.fai'):
             log.critical(f'Please, index {viruses_fa} with `samtools faidx {viruses_fa}`')
         conf['viruses_fa'] = verify_file(viruses_fa)
-    if not refdata.genomes_dir:
-        if not viruses_fa:
-            log.critical(f'Please provide either --combined-fa, or both --host-fa and --viruses-fa, or --genomes-dir')
-        if not viruses_fa or (not combined_fa and not host_fa):
-            log.critical(f'Please provide either --viruses-fa and (--combined-fa or --host-fa), or --genomes-dir')
+    if not genomes_dir:
+        if not combined_fa and not host_fa:
+            log.critical(f'Please provide either --combined-fa or --host-fa, or --genomes-dir')
         if host_fa:
             conf['host_fa'] = verify_file(host_fa)
     if gtf_file:
