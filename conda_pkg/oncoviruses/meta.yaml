@@ -19,7 +19,6 @@ requirements:
     - python ==3.7.*
     - ngs_utils
     - click
-    - cyvcf2
     - snakemake
     - samtools
     - sambamba

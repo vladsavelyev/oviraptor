@@ -502,7 +502,7 @@ rule filter_vcf:
 
 # bcftools doesn't work with 4th columns in bed
 # vcfanno doesn't work when mulitple genes overlaping one variant
-# so using bedtools intersect plus a cyvcf2 loop
+# so using bedtools intersect plus a loop over the VCF
 def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_name, anno_desc):
     overlap_tsv = join(work_dir, 'overlap.tsv')
     shell(f'bedtools intersect -a {vcf_path} -b {genes_path} -loj > {overlap_tsv}')
@@ -516,16 +516,28 @@ def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_nam
             if gene.strip():
                 gene_by_id[var_id].append(gene)
 
-    def proc_rec(rec, vcf):
-        genes = [g for g in
-                 gene_by_id.get(rec.ID, []) + gene_by_id.get(rec.INFO.get('MATEID', '.'), [])
-                 if g != '.' and g is not None]
-        if genes:
-            rec.INFO[anno_name] = ','.join(genes)
-        return rec
-    def proc_hdr(vcf):
-        add_cyvcf2_hdr(vcf, anno_name, '.', 'String', anno_desc)
-    iter_vcf(vcf_path, output_vcf_path, proc_rec=proc_rec, proc_hdr=proc_hdr)
+    ungz, gz = get_ungz_gz(output_vcf_path)
+    with open_gzipsafe(vcf_path) as inp_f, open(ungz, 'w') as out_f:
+        for l in inp_f:
+            if l.startswith('##'):
+                out_f.write(l)
+            elif l.startswith('#'):
+                out_f.write(f'##INFO=<ID={anno_name},Number=.,Type=String,Description="{anno_desc}">\n')
+                out_f.write(l)
+            else:
+                fields = l.strip().split('\t')
+                var_id = fields[2]
+                info = fields[7]
+                info_d = dict(kv.split('=') if '=' in kv else (kv, True) for kv in info.split(';'))
+                mate_id = info_d.get('MATEID')
+                genes = [g.replace('"', '').strip() for g in
+                         gene_by_id.get(var_id, []) + gene_by_id.get(mate_id, [])
+                         if g.replace('"', '').strip() != '.' and g is not None]
+                if genes:
+                    info += f';{anno_name}={",".join(genes)}'
+                fields[7] = info
+                out_f.write('\t'.join(fields) + '\n')
+    shell(f'bgzip {ungz} && tabix -p vcf {gz}')
 
     before = count_vars(vcf_path)
     after = count_vars(output_vcf_path)
@@ -582,7 +594,7 @@ if GTF_PATH:  # user provided GTF file - overriding the default annotation BED
                 for l in i_f:
                     chrom, _, _, start, end, _, strand, _, attrs = l.strip().split('\t')
                     attr_d = dict(item.strip().split(' ') for item in attrs.split(';') if item)
-                    gene = attr_d.get('gene_name')
+                    gene = attr_d.get('gene_name').replace('"', '').strip()
                     if gene:
                         o_f.write(f'{chrom}\t{start}\t{end}\t{gene}\t.\t{strand}\n')
 
