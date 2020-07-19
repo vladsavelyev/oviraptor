@@ -390,16 +390,15 @@ rule run_lumpy:
     params:
         lumpy = join(package_path(), 'lumpy', 'lumpy'),
     group: 'lumpy'
-    run:
-        shell(
-            '{params.lumpy} '
-            '-mw 4 '
-            '-tt 0 '
-            '-x {input.blacklist} '
-            '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
-            '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
-            '| gsort - {input.fai} > {output.vcf}'
-        )
+    shell:
+        '{params.lumpy} '
+        '-mw 4 '
+        '-tt 0 '
+        '-x {input.blacklist} '
+        '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,'
+        'min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
+        '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
+        '| gsort - {input.fai} > {output.vcf}'
 
 rule run_manta:
     input:
@@ -475,15 +474,8 @@ def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_nam
             fields = l.strip().split('\t')
             var_id = fields[2]
             VCF_COL_NUM = 10
-            gene = None
-            if genes_path.endswith('.bed') or genes_path.endswith('.bed.gz'):
-                chrom, start, end, gene = fields[VCF_COL_NUM:VCF_COL_NUM+4]
-            else:  # GTF
-                chrom, _, _, start, end, _, strand, _, info = fields[VCF_COL_NUM:]
-                m = re.match(r'.*gene_name "(\S+)";.*', info)
-                if m:
-                    gene = m.group(1)
-            if gene:
+            chrom, start, end, gene = fields[VCF_COL_NUM:VCF_COL_NUM+4]
+            if gene.strip():
                 gene_by_id[var_id].append(gene)
 
     def proc_rec(rec, vcf):
@@ -509,7 +501,7 @@ rule annotate_with_viral_genes:
         vcf = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz'),
         tbi = join(WORK_DIR, 'step10_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz.tbi'),
     params:
-        work_dir = join(WORK_DIR, 'step10_{virus}_viral_genes')
+        work_dir = lambda wc, input, output: dirname(output.vcf)
     run:
         genes_bed = join(package_path(), 'data', f'{wildcards.virus}.bed')
         if not isfile(genes_bed):
@@ -520,17 +512,16 @@ rule annotate_with_viral_genes:
                 'ViralGenes',
                 'Viral genes that this breakpoint overlaps (and likely disrupts)')
 
-last_vcf_rule = rules.annotate_with_viral_genes
-
-if GTF_PATH:
+host_genes_bed = join(package_path(), 'data', 'hg38_noalt.genes.bed.gz')
+if GTF_PATH:  # user provided GTF file - overriding the default annotation BED
     rule prep_gtf:
         input:
             gtf_path = GTF_PATH,
             fai = COMBINED_FA + '.fai',
         output:
-            gtf = join(WORK_DIR, 'step11_{virus}_host_genes/hg38_noalt.genes.gtf'),
+            gtf = join(WORK_DIR, 'host_genes_prep/hg38_noalt.genes.gtf'),
         params:
-            work_dir = join(WORK_DIR, 'step11_{virus}_host_genes'),
+            work_dir = join(WORK_DIR, 'host_genes_prep'),
         run:
             # in order to pad genes by 100kb, we first need to subset the GTF to main chromosomes, and
             # remove chr prefixes from the fai file for bedtools.
@@ -543,58 +534,72 @@ if GTF_PATH:
             shell("bedtools intersect -a {input.gtf_path} -b {grch38_noalt_bed}"
                   " | grep -w gene | sed 's/^MT/M/' | sed 's/^/chr/' > {output.gtf}")
 
-    rule annotate_with_disrupted_host_genes:
-        input:
-            vcf = rules.annotate_with_viral_genes.output.vcf,
-            gtf = rules.prep_gtf.output.gtf,
-            fai = COMBINED_FA + '.fai',
-        output:
-            vcf = join(WORK_DIR, 'step11_{virus}_host_genes/breakpoints.annotated.vcf.gz'),
-        params:
-            work_dir = join(WORK_DIR, 'step11_{virus}_host_genes'),
-        run:
-            overlap_with_genes(input.vcf, output.vcf, input.gtf, params.work_dir,
-                'DisruptedGenes',
-                'Host genes overlapping the breakpoint, that are probably disrupted '
-                'by the viral integration event')
-
-    HOST_GENES_BASES_UPSTREAM = 100_000
-
-    rule slop_gtf:
+    rule gtf_to_bed:
         input:
             gtf = rules.prep_gtf.output.gtf,
-            fai = COMBINED_FA + '.fai',
         output:
-            gtf = join(WORK_DIR, 'step12_{virus}_host_genes/hg38_noalt.genes.slopped.gtf'),
-        params:
-            work_dir = join(WORK_DIR, 'step12_{virus}_host_genes'),
-            bases_upstream = HOST_GENES_BASES_UPSTREAM,
-        shell:
-            # pad genes by 100kb
-            # -l - The number of base pairs to subtract from the start coordinate
-            # -s - Define -l and -r based on strand
-            'bedtools slop -i {input.gtf} -l {params.bases_upstream} -r 0 -s -g {input.fai}'
-            ' > {output.gtf}'
-
-    rule annotate_with_host_genes_upstream:
-        input:
-            vcf = rules.annotate_with_viral_genes.output.vcf,
-            gtf = rules.slop_gtf.output.gtf,
-            fai = COMBINED_FA + '.fai',
-        output:
-            vcf = join(WORK_DIR, 'step12_{virus}_host_genes/breakpoints.genes.host_cancer_genes.vcf.gz'),
-        params:
-            work_dir = join(WORK_DIR, 'step12_{virus}_host_genes'),
-            bases_upstream = HOST_GENES_BASES_UPSTREAM,
+            bed = join(WORK_DIR, 'host_genes_prep/hg38_noalt.genes.bed'),
         run:
-            overlap_with_genes(input.vcf, output.vcf, input.gtf, params.work_dir,
-                f'GenesWithin{params.bases_upstream // 1000}kb',
-                f'Genes that start within the {params.bases_upstream // 1000}kb distance '
-                f'of the breakpoint. Based on https://www.biorxiv.org/content/10.1101/2020.02.12.942755v1, '
-                f'that reported significant increases in chromatin accessibility exclusively '
-                f'within 100 kbp of HPV integration sites.')
+            with open(input.gtf) as i_f, open(output.bed, 'w') as o_f:
+                for l in i_f:
+                    chrom, _, _, start, end, _, strand, _, attrs = l.strip().split('\t')
+                    attr_d = dict(item.strip().split(' ') for item in attrs.split(';') if item)
+                    gene = attr_d.get('gene_name')
+                    if gene:
+                        o_f.write(f'{chrom}\t{start}\t{end}\t{gene}\t.\t{strand}\n')
 
-    last_vcf_rule = rules.annotate_with_host_genes_upstream
+    host_genes_bed = rules.gtf_to_bed.output.bed
+
+rule annotate_with_disrupted_host_genes:
+    input:
+        vcf = rules.annotate_with_viral_genes.output.vcf,
+        bed = host_genes_bed,
+        fai = COMBINED_FA + '.fai',
+    output:
+        vcf = join(WORK_DIR, 'step11_{virus}_host_genes_disrupted/breakpoints.annotated.vcf.gz'),
+    params:
+        work_dir = lambda wc, input, output: dirname(output.vcf)
+    run:
+        overlap_with_genes(input.vcf, output.vcf, input.bed, params.work_dir,
+            'DisruptedGenes',
+            'Host genes overlapping the breakpoint, that are probably disrupted '
+            'by the viral integration event')
+
+HOST_GENES_BASES_UPSTREAM = 100_000
+
+rule slop_host_bed:
+    input:
+        bed = host_genes_bed,
+        fai = COMBINED_FA + '.fai',
+    output:
+         bed = join(WORK_DIR, 'host_genes_prep/hg38_noalt_genes_slopped.bed'),
+    params:
+        work_dir = join(WORK_DIR, 'host_genes_prep'),
+        bases_upstream = HOST_GENES_BASES_UPSTREAM,
+    shell:
+        # pad genes by 100kb
+        # -l - The number of base pairs to subtract from the start coordinate
+        # -s - Define -l and -r based on strand
+        'bedtools slop -i {input.bed} -l {params.bases_upstream} -r 0 -s -g {input.fai}'
+        ' > {output.bed}'
+
+rule annotate_with_host_genes_upstream:
+    input:
+        vcf = rules.annotate_with_disrupted_host_genes.output.vcf,
+        bed = rules.slop_host_bed.output.bed,
+        fai = COMBINED_FA + '.fai',
+    output:
+        vcf = join(WORK_DIR, 'step12_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
+    params:
+        work_dir = lambda wc, input, output: dirname(output.vcf),
+        bases_upstream = HOST_GENES_BASES_UPSTREAM,
+    run:
+        overlap_with_genes(input.vcf, output.vcf, input.bed, params.work_dir,
+            f'GenesWithin{params.bases_upstream // 1000}kb',
+            f'Genes that start within the {params.bases_upstream // 1000}kb distance '
+            f'of the breakpoint. Based on https://www.biorxiv.org/content/10.1101/2020.02.12.942755v1, '
+            f'that reported significant increases in chromatin accessibility exclusively '
+            f'within 100 kbp of HPV integration sites.')
 
 def merge_viruses_input_fn(wildcards):
     if not VIRUSES:
@@ -602,7 +607,7 @@ def merge_viruses_input_fn(wildcards):
         viruses = [v.strip() for v in open(selected_viruses_tsv).readlines() if v.strip()]
     else:
         viruses = VIRUSES
-    return expand(last_vcf_rule.output[0], virus=viruses)
+    return expand(rules.annotate_with_host_genes_upstream.output[0], virus=viruses)
 
 rule merged_viruses:
     input:
