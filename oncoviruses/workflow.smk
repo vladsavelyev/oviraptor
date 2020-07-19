@@ -630,7 +630,8 @@ rule slop_host_bed:
         # pad genes by 100kb
         # -l - The number of base pairs to subtract from the start coordinate
         # -s - Define -l and -r based on strand
-        'bedtools slop -i {input.bed} -l {params.bases_upstream} -r 0 -s -g {input.fai}'
+        'zgrep -f <(cut -f1 {input.fai}) {input.bed} | '
+        'bedtools slop -i stdin -l {params.bases_upstream} -r 0 -s -g {input.fai}'
         ' > {output.bed}'
 
 rule annotate_with_host_genes_upstream:
