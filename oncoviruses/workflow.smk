@@ -24,7 +24,7 @@ THREADS = config.get('cores', 10)
 WORK_DIR = join(OUTPUT_DIR, 'work')
 
 SV_CALLER = 'lumpy'
-ALIGNER = 'minimap2'  # bwa
+ALIGNER = config.get('aligner', 'minimap2')  # bwa
 
 VIRUSES = config.get('viruses', None)
 if VIRUSES:

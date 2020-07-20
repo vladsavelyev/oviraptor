@@ -33,6 +33,9 @@ from oncoviruses import package_path
                    'and index with `samtools faidx` and `bwa index`')
 @click.option('--genomes', '--genomes-dir', 'input_genomes_url',
               help='Path to the umccrise reference data, alternative to all "*-fa" options. Can be s3 or gds')
+@click.option('--aligner', 'aligner', type=click.Choice('bwa', 'minimap2'),
+              help='Aligner to use: bwa or minimap2. BWA is more accurate, '
+                   'but minimap2 does not require index and works much faster')
 
 @click.option('-s', '--sample-name' '--prefix', 'sample_name',
               help='Prefix for output files. Default is the basename of the output file.')
@@ -43,8 +46,9 @@ from oncoviruses import package_path
 @click.option('-n', '--dryrun', 'dryrun', is_flag=True,
               help='Propagated to snakemake. Prints rules and commands to be run without actually executing them.')
 
-def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_fa=None, viruses_fa=None, combined_fa=None,
-         input_genomes_url=None, sample_name=None, requested_cores=None, dryrun=None, unlock=None):
+def main(bam, output_dir, viruses=None, only_detect=False,
+         gtf_file=None, host_fa=None, viruses_fa=None, combined_fa=None, input_genomes_url=None,
+         aligner=None, sample_name=None, requested_cores=None, dryrun=None, unlock=None):
 
     if not bam.endswith('.bam'):
         raise click.BadParameter(f'Input must be a BAM file, got: {bam}')
@@ -76,6 +80,8 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
         conf['viruses'] = viruses
     if only_detect:
         conf['only_detect'] = only_detect
+    if aligner:
+        conf['aligner'] = aligner
 
     genomes_dir = None
     try:
@@ -89,12 +95,14 @@ def main(bam, output_dir, viruses=None, only_detect=False, gtf_file=None, host_f
             conf['genomes_dir'] = genomes_dir
 
     if combined_fa:
-        if not verify_file(combined_fa + '.bwt'):
-            log.critical(f'Please, index {combined_fa} with `bwa index {combined_fa}`')
+        if aligner == 'bwa' and not verify_file(combined_fa + '.bwt'):
+            log.critical(f'Please, index {combined_fa} with `bwa index {combined_fa}`, '
+                         f'or run with `--aligner minimap2`')
         conf['combined_fa'] = combined_fa
     if viruses_fa:
-        if not verify_file(viruses_fa + '.bwt'):
-            log.critical(f'Please, index {viruses_fa} with `bwa index {viruses_fa}`')
+        if aligner == 'bwa' and not verify_file(viruses_fa + '.bwt'):
+            log.critical(f'Please, index {viruses_fa} with `bwa index {viruses_fa}`, '
+                         f'or run with `--aligner minimap2`')
         if not verify_file(viruses_fa + '.fai'):
             log.critical(f'Please, index {viruses_fa} with `samtools faidx {viruses_fa}`')
         conf['viruses_fa'] = verify_file(viruses_fa)
