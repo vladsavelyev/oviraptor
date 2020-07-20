@@ -21,8 +21,10 @@ PRIO_TSV = join(OUTPUT_DIR, 'prioritized_oncoviruses.tsv')
 ## Other parameters
 SAMPLE = config['sample_name']
 THREADS = config.get('cores', 10)
-SV_CALLER = 'lumpy'
 WORK_DIR = join(OUTPUT_DIR, 'work')
+
+SV_CALLER = 'lumpy'
+ALIGNER = 'minimap2'  # bwa
 
 VIRUSES = config.get('viruses', None)
 if VIRUSES:
@@ -56,7 +58,6 @@ rule all:
     input:
         RESULT_PATH if not ONLY_DETECT else [],
         PRIO_TSV if ONLY_DETECT or not VIRUSES else [],
-    # input: join(WORK_DIR, 'all.done')
 
 
 rule extract_unmapped_and_mate_unmapped_reads:
@@ -101,8 +102,15 @@ if not VIRUSES:
                     os.system(f'rm {tmp_bam}')
                 else:
                     break
-            shell("bwa mem -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2} "
-                  " | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
+
+            if ALIGNER == 'bwa':
+                # -Y  = use soft clipping for supplementary alignments
+                shell("bwa mem -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2} "
+                      " | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
+            else:
+                # -Y  = use soft clipping for supplementary alignments
+                shell("minimap2 -ax sr -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2}"
+                    " | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
 
     rule index_virus_bam:
         input:
@@ -150,25 +158,26 @@ if not VIRUSES:
     ONCOVIRAL_SOURCE_URL = 'https://gdc.cancer.gov/about-data/data-harmonization-and-generation/gdc-reference-files'
     rule prioritize_viruses:
         input:
-            mosdepth_regions_bed_gz = rules.mosdepth.output.mosdepth_regions_bed_gz,
-            mosdepth_thresholds_bed_gz = rules.mosdepth.output.mosdepth_thresholds_bed_gz,
+            md_regions_bed_gz = rules.mosdepth.output.mosdepth_regions_bed_gz,
+            md_thresholds_bed_gz = rules.mosdepth.output.mosdepth_thresholds_bed_gz,
         output:
-            oncoviruses_tsv = PRIO_TSV,
+            tsv = PRIO_TSV,
         params:
-            completeness_share = MIN_1x_PCT / 100.0
+            completeness_fraction =MIN_1x_PCT / 100.0
         shell:
-            "echo '## Viral sequences (from {ONCOVIRAL_SOURCE_URL}) found in unmapped reads' > {output.oncoviruses_tsv} &&"
-            "echo '## Sample: {SAMPLE}' >> {output.oncoviruses_tsv} && "
-            "echo '## Minimal completeness: {MIN_1x_PCT}% at 1x or {MIN_5x_LEN}bp at 5x' >> {output.oncoviruses_tsv} && "
-            "echo '#virus\tsize\tdepth\t1x\t5x\t25x\tsignificance' >> {output.oncoviruses_tsv} && "
-            "paste <(gunzip -c {input.mosdepth_regions_bed_gz}) <(zgrep -v ^# {input.mosdepth_thresholds_bed_gz}) | "
+            "echo '## Viral sequences (from {ONCOVIRAL_SOURCE_URL}) found in unmapped reads' > {output.tsv} &&"
+            "echo '## Sample: {SAMPLE}' >> {output.tsv} && "
+            "echo '## Minimal completeness: {MIN_1x_PCT}% at 1x or {MIN_5x_LEN}bp at 5x' >> {output.tsv} && "
+            "echo '#virus\tsize\tdepth\t1x\t5x\t25x\tsignificance' >> {output.tsv} && "
+            "paste <(gunzip -c {input.md_regions_bed_gz}) <(zgrep -v ^# {input.md_thresholds_bed_gz}) | "
             "awk 'BEGIN {{FS=\"\\t\"}} {{ printf(\"%s\\t%d\\t%3.1f\\t%3.3f\\t%3.3f\\t%3.3f\\t%s\\n\", "
-            "$1, $3, $4, $9/$3, $10/$3, $11/$3, (($10>{MIN_5x_LEN} || $11/$3>{params.completeness_share}) ? \"significant\" : \".\")) }}' | "
-            "sort -n -r -k5,5 -k6,6 -k4,4 -k3,3 >> {output.oncoviruses_tsv}"
+            "$1, $3, $4, $9/$3, $10/$3, $11/$3, (($10>{MIN_5x_LEN} || $11/$3>{params.completeness_fraction}) "
+            "? \"significant\" : \".\")) }}' | "
+            "sort -n -r -k5,5 -k6,6 -k4,4 -k3,3 >> {output.tsv}"
 
     checkpoint select_viruses:
         input:
-            tsv = rules.prioritize_viruses.output.oncoviruses_tsv,
+            tsv = rules.prioritize_viruses.output.tsv,
             gdc_fa = VIRUSES_FA,
         output:
             selected_viruses_tsv = join(WORK_DIR, 'detect_viral_reference', 'present_viruses.txt'),
@@ -198,29 +207,41 @@ rule create_viral_reference:
         gdc_fa = VIRUSES_FA,
     output:
         virus_fa = join(WORK_DIR, '{virus}', '{virus}.fa'),
-        virus_bwt = join(WORK_DIR, '{virus}', '{virus}.fa.bwt'),  # one of bwa index files
     shell:
         "samtools faidx {input.gdc_fa} {wildcards.virus} > {output.virus_fa}"
-        " && bwa index {output.virus_fa}"
+
+rule index_viral_reference:
+    input:
+        join(WORK_DIR, '{virus}', '{virus}.fa'),
+    output:
+        join(WORK_DIR, '{virus}', '{virus}.fa.bwt'),  # one of bwa index files
+    shell:
+        "bwa index {input}"
 
 # aligning to specific viral sequence
 rule bwa_unmapped_and_mateunmapped_to_viral_ref:
     input:
         fq1 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq1,
         fq2 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq2,
-        virus_bwa_prefix = rules.create_viral_reference.output.virus_fa,
+        virus_fa = rules.create_viral_reference.output.virus_fa,
+        virus_bwt = rules.index_viral_reference.output if ALIGNER == 'bwa' else [],
     output:
         virus_bam_possorted = join(WORK_DIR, 'step3_host_unmapped_and_bridging_reads_to_{virus}.possorted.bam')
     threads: THREADS
     params:
         rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
-    shell:
-        # using the polyidus bwa command.
-        # -T1 = minimum score to output [default 30]
-        # -a  = output all alignments for SE or unpaired PE
-        # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -a -Y -t{threads} -R '{params.rg}' {input.virus_bwa_prefix} {input.fq1} {input.fq2}"
-        " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
+    run:
+        if ALIGNER == 'bwa':
+            # using the polyidus bwa command.
+            # -T1 = minimum score to output [default 30]
+            # -a  = output all alignments for SE or unpaired PE
+            # -Y  = use soft clipping for supplementary alignments
+            shell("bwa mem -a -Y -t{threads} -R '{params.rg}' {input.virus_fa} {input.fq1} {input.fq2}"
+                " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
+        else:
+            # -Y  = use soft clipping for supplementary alignments
+            shell("minimap2 -ax sr -Y -t{threads} -R '{params.rg}' {input.virus_fa} {input.fq1} {input.fq2}"
+                " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
 
 
 # Extracts reads with at least 50 soft-clipped base stretches.
@@ -234,7 +255,8 @@ rule extract_viral_and_bridging_reads:
     input:
         virus_bam_possorted = rules.bwa_unmapped_and_mateunmapped_to_viral_ref.output.virus_bam_possorted,
     output:
-        virus_bam_possorted = join(WORK_DIR, 'step4_host_unmapped_and_bridging_reads_to_{virus}.only_bridging_reads.possorted.bam')
+        virus_bam_possorted = join(WORK_DIR,
+           'step4_host_unmapped_and_bridging_reads_to_{virus}.only_bridging_reads.possorted.bam')
     threads: max(10, THREADS)
     shell:
          "sambamba view -t{threads} -fbam -F 'not unmapped or not mate_is_unmapped or {sambamba_softclip_expr}'"
@@ -245,7 +267,8 @@ rule namesort_viral_bridging_bam:
     input:
         virus_bam_possorted = rules.extract_viral_and_bridging_reads.output.virus_bam_possorted,
     output:
-        virus_bam_namesorted = join(WORK_DIR, 'step5_host_unmapped_and_bridging_reads_to_{virus}.only_bridging_reads.namesorted.bam')
+        virus_bam_namesorted = join(WORK_DIR,
+            'step5_host_unmapped_and_bridging_reads_to_{virus}.only_bridging_reads.namesorted.bam')
     threads: THREADS
     shell:
         "samtools sort -n -@{threads} {input.virus_bam_possorted} -Obam -o {output.virus_bam_namesorted}"
@@ -268,30 +291,42 @@ rule create_combined_reference:
     output:
         combined_fa   = COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
         combined_fai = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.fai',
-        combined_bwt = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.bwt',
     shell:
         "cat {input.host_fa} {input.viruses_fa} > {output.combined_fa} && "
-        "samtools faidx {output.combined_fa} && "
-        "bwa index {output.combined_fa}"
+        "samtools faidx {output.combined_fa}"
+
+rule index_combined_reference:
+    input:
+        COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
+    output:
+        (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.bwt',
+    shell:
+        "bwa index {input}"
 
 # aligning to specific viral sequence
 rule bwa_viral_bridging_to_comb_ref:
     input:
         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
-        bwa_prefix = rules.create_combined_reference.output.combined_fa,
+        host_fa  = rules.create_combined_reference.output.combined_fa,
+        host_bwt = rules.index_combined_reference.output if ALIGNER == 'bwa' else [],
     output:
         comb_bam_possorted = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam')
     threads: THREADS
     params:
         rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
-    shell:
-        # using the polyidus bwa command.
-        # -T1 = minimum score to output [default 30]
-        # -a  = output all alignments for SE or unpaired PE
-        # -Y  = use soft clipping for supplementary alignments
-        "bwa mem -a -Y -t{threads} -R '{params.rg}' {input.bwa_prefix} {input.fq1} {input.fq2}"
-        " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}"
+    run:
+        if ALIGNER == 'bwa':
+            # using the polyidus bwa command.
+            # -T1 = minimum score to output [default 30]
+            # -a  = output all alignments for SE or unpaired PE
+            # -Y  = use soft clipping for supplementary alignments
+            shell("bwa mem -a -Y -t{threads} -R '{params.rg}' {input.host_fa} {input.fq1} {input.fq2}"
+                " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}")
+        else:
+            # -Y  = use soft clipping for supplementary alignments
+            shell("minimap2 -ax sr -Y -t{threads} -R '{params.rg}' {input.host_fa} {input.fq1} {input.fq2}"
+                " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}")
 
 # # Removing reads that are not helpful: fully unmapped pairs. In other words, keeping
 # # mapped pairs and pairs with an unmapped mate that can bridge us to the host genome
@@ -369,8 +404,6 @@ rule lumpy_histo:
         '-X 4 '
         '-N 10000 '
         '-o {output}'
-
-#TODO: check why HCV-2 gets into HPV18 VCF file
 
 rule run_lumpy:
     input:
@@ -579,7 +612,8 @@ if GTF_PATH:  # user provided GTF file - overriding the default annotation BED
             shell("cat {input.fai} | grep chr | sed 's/chrM/MT/' | sed 's/chr//' > {hg38_fai_to_grch38}")
 
             grch38_noalt_bed = join(params.work_dir, 'grch38_noalt.bed')
-            shell("cat {hg38_fai_to_grch38} | awk '{{printf(\"%s\\t0\\t%d\\n\", $1, $2, $2-1)}}' > {grch38_noalt_bed}")
+            shell("cat {hg38_fai_to_grch38} | awk '{{printf(\"%s\\t0\\t%d\\n\", $1, $2, $2-1)}}'"
+                  " > {grch38_noalt_bed}")
 
             shell("bedtools intersect -a {input.gtf_path} -b {grch38_noalt_bed}"
                   " | grep -w gene | sed 's/^MT/M/' | sed 's/^/chr/' > {output.gtf}")

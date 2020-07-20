@@ -23,9 +23,10 @@ requirements:
     - samtools
     - sambamba
     - mosdepth
-    - bwa
+    - minimap2
     - bcftools
     - ngs_utils >=2.7.0
+    - pysam  # to process BAM file for lumpy
 
 test:
   commands:
