@@ -1,5 +1,9 @@
 # Detection of oncoviruses in tumor whole genome samples
 
+```
+oncoviruses tumor.bam -o results --host-fa hg38.fa
+```
+
 ## Installation
 
 Via conda:
@@ -7,7 +11,7 @@ Via conda:
 ```
 conda create -n oncoviruses \
     -c vladsaveliev -c conda-forge -c bioconda -c defaults \
-    python==3.7.3 bwa samtools sambamba snakemake ngs_utils click
+    python==3.7.3 minimap2 samtools sambamba bcftools mosdepth snakemake ngs_utils click
 conda activate oncoviruses
 git clone --recursive git@github.com:umccr/oncoviruses.git
 pip install -e oncoviruses
@@ -16,50 +20,49 @@ pip install -e oncoviruses
 Installing conda is optional if you have the following tools installed and available in $PATH:
 
 - `python3`
-- `bwa`
+- `minimap2`
 - `samtools`
 - `sambamba`
 - `bcftools`
+- `mosdepth`
 - `snakemake`
-- `mosdepth` (on macOS, you can pull this docker image instead: `docker pull quay.io/biocontainers/mosdepth:0.2.9--hbeb723e_0`
-- `python2` and Manta's `configManta.py` (you can install it in a separate environment as python2 clashes with python3, but make sure they both envs are appended to $PATH). Or you can pull a dockerized version with `docker pull quay.io/biocontainers/manta:1.6.0--py27_0`.
+- `lumpy` (on macOS, you can pull a dockerized version 
+           with `docker pull quay.io/biocontainers/lumpy-sv:0.3.0--h0b85cd1_0`)
 
-Usage:
+## Usage
+
+The tool requires a whole genome seqeuncing BAM file as an input data, and the host (human) reference genome fasta file (ideally, hg38), which can be provided with `--host-fa` as follows:
 
 ```
-oncoviruses tumor.bam -o results --genomes [path to umccrise genomes dir]
+oncoviruses tumor.bam -o results --host-fa hg38.fa
 ```
 
-To use 10 CPUs:
+The tool is using an embedded ensemble annotation file to annotate the breakpoints with genes. You can override it with your own annotation file with `--host-gtf`, e.g.:
+
+```
+oncoviruses tumor.bam -o results --host-fa hg38.fa --host-gtf Homo_sapiens.GRCh38.gtf.gz
+```
+
+If the `--host-fa` is not provided, the tool will attempt to download into the output folder, which might take a while and around 3G of space.
+
+The tool can make use of multiple cores. To use 10 CPUs:
 
 ```
 oncoviruses tumor.bam -o results -t10
 ```
 
-To analyse specifically HPV18:
+If you already know your candidate virus and just want to find the integration sites, use:
 
 ```
 oncoviruses tumor.bam -o results -v HPV18
 ```
 
-
-## Preparing reference data
-
-Creating combined reference:
+If you don't need integration sites and just want to find viral content, use:
 
 ```
-samtools faidx genomes/hg38/hg38.fa \
-    chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY chrM \
-    > genomes/hg38/hg38noalt.fa
-cat genomes/viral/gdc-viral.fa >> genomes/hg38/hg38noalt_plus_gdcviral.fa
-samtools faidx genomes/hg38/hg38noalt_plus_gdcviral.fa
-bwa index genomes/hg38/hg38noalt_plus_gdcviral.fa
+oncoviruses tumor.bam -o results --only-detect
 ```
 
-
-## Ideas
-
-Annotation with genes. Include 100kbp downstream. Add RNA oncogenes, like CCAT1 (Long non-coding RNA that promotes tumor formation and is upregulated in colon cancer and other cancer cell types. This transcript may regulate long range chromosomal interactions, including at the Myc oncoprotein locus. Often affected by HPV18 integration).
 
 
 
