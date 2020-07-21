@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import sys
 import os
 from os.path import dirname, abspath, join, basename, isfile, isdir, splitext
 import click
@@ -108,7 +107,24 @@ def main(bam, output_dir, viruses=None, only_detect=False,
         conf['viruses_fa'] = verify_file(viruses_fa)
     if not genomes_dir:
         if not combined_fa and not host_fa:
-            log.critical(f'Please provide either --combined-fa or --host-fa, or --genomes-dir')
+            fa_url = 's3://ngi-igenomes/igenomes/Homo_sapiens/UCSC/hg38/Sequence/WholeGenomeFasta/genome.fa'
+            host_fa = join('oncoviruses', 'hg38.fa')
+            cmd = f'aws s3 --no-sign-request cp {fa_url} {host_fa}'
+            log.warn(
+                f'The hg38 fasta file is not provided with --host-fa, '
+                f'download it now into the current working directory as {host_fa}? [Y/n]')
+            resp = 'n'
+            try:
+                resp = input()
+            except:
+                pass
+            if resp == 'n':
+                log.warn()
+                log.warn('You can download the manually with and restart the tool with `--host-fa`, e.g.:')
+                log.warn(f'$ {cmd}')
+                log.warn(f'$ oncoviruses --host-fa {host_fa}')
+                exit()
+            run_simple(cmd)
         if host_fa:
             conf['host_fa'] = verify_file(host_fa)
     if gtf_file:
