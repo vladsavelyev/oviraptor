@@ -1,0 +1,55 @@
+name: Build conda package, test and upload to anaconda
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: build-conda-package
+        uses: vladsaveliev/conda-publish-action@master
+        run: |
+          mamba build conda/oncoviruses --output-folder conda/oncoviruses
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: install-conda-package
+        uses: vladsaveliev/conda-publish-action@master
+        run: |
+          mamba install --use-local oncoviruses
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: run-test
+        run: |
+          cd test
+          wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/chromosomes/chr8.fa.gz
+          oncoviruses T_SRR7890936_50pc-ready.bam -o results --host-fa chr8.fa.gz
+
+  publish:
+    runs-on: ubuntu-latest
+    on:
+      release:
+        types: [published]
+    steps:
+      - name: publish-to-conda
+        uses: vladsaveliev/conda-publish-action@master
+        with:
+          anacondatoken: ${{ secrets.ANACONDA_TOKEN }}
+        run: |
+          cd conda/oncoviruses
+          mamba convert -p osx-64 linux-64/*.tar.bz2
+          anaconda -t ${{ secrets.ANACONDA_TOKEN }} upload linux-64/*.tar.bz2
+          anaconda -t ${{ secrets.ANACONDA_TOKEN }} upload osx-64/*.tar.bz2
+
+
+
+
+
+
+
+
+
+

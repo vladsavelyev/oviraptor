@@ -1,0 +1,41 @@
+{% set data = load_setup_py_data() %}
+
+package:
+  name: oncoviruses
+  version: {{ data['version'] }}
+
+source:
+  path: ../../
+
+build:
+  number: 0
+  script: python setup.py install --single-version-externally-managed --record=record.txt
+
+requirements:
+  build:
+    - python
+    - versionpy
+    - ngs_utils >=2.7.0
+
+  run:
+    - python
+    - ngs_utils >=2.7.0
+    - click
+    - snakemake
+    - samtools
+    - sambamba
+    - mosdepth
+    - minimap2
+    - bcftools
+    - pysam  # to process BAM file for lumpy
+    - awscli  # to download the reference fasta
+
+test:
+  commands:
+    - oncoviruses --help
+
+about:
+  home: {{ data['url'] }}
+  license: {{ data['license'] }}
+  license_family: {{ data['license_family'] }}
+  summary: {{ data['description'] }}
