@@ -31,19 +31,22 @@ Installing conda is optional if you have the following tools installed and avail
 
 ## Usage
 
-The tool requires a whole genome seqeuncing BAM file as an input data, and the host (human) reference genome fasta file (ideally, hg38), which can be provided with `--host-fa` as follows:
+The tool requires:
+
+ - a host whole genome seqeuncing BAM file as an input data (any human reference genome will work as the tool will extract reads from the file to realign), 
+ - a human hg38 reference genome fasta file, which can be provided with `--host-fa` as follows:
 
 ```
 oncoviruses tumor.bam -o results --host-fa hg38.fa
 ```
 
-The tool is using an embedded ensemble annotation file to annotate the breakpoints with genes. You can override it with your own annotation file with `--host-gtf`, e.g.:
+The tool will also use a pre-packaged hg38 gene coordinates file to annotate the breakpoints. However you can override it with your own annotation file with `--host-gtf`, e.g.:
 
 ```
 oncoviruses tumor.bam -o results --host-fa hg38.fa --host-gtf Homo_sapiens.GRCh38.gtf.gz
 ```
 
-If the `--host-fa` is not provided, the tool will attempt to download into the output folder, which might take a while and around 3G of space.
+If the `--host-fa` is not provided, the tool will attempt to download it from [AWS-iGenomes](https://github.com/ewels/AWS-iGenomes) using `awscli` into the output folder (`results/reference`, provided `-o results`), which might take a while and around 3G of space.
 
 The tool can make use of multiple cores. To use 10 CPUs:
 
