@@ -2,8 +2,6 @@ import os
 from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
 import subprocess
-import glob
-
 from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz
 from ngs_utils.logger import warn, critical
 from ngs_utils.vcf_utils import count_vars
@@ -48,7 +46,7 @@ else:
     HOST_FA     = HOST_FA     or refdata.get_ref_file(genome=GENOME, key='fa', must_exist=False)
     VIRUSES_FA  = VIRUSES_FA  or refdata.get_ref_file(genome=GENOME, key='gdc_viral_fa', must_exist=False)
 VIRUSES_FA = VIRUSES_FA or join(package_path(), 'data', 'gdc-viral.fa')
-assert VIRUSES_FA and (COMBINED_FA or HOST_FA)
+assert HOST_FA or COMBINED_FA
 
 # By default, using the built-in BED in package_path()/data/hg38_noalt.genes.bed.gz
 # But if the user provides the GTF file, using it instead
@@ -291,9 +289,16 @@ rule create_combined_reference:
     output:
         combined_fa   = COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
         combined_fai = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.fai',
-    shell:
-        "cat {input.host_fa} {input.viruses_fa} > {output.combined_fa} && "
-        "samtools faidx {output.combined_fa}"
+    run:
+        if input.host_fa.endswith('.gz'):
+            shell("gunzip -c {input.host_fa} > {output.combined_fa}")
+        else:
+            shell("cat {input.host_fa} > {output.combined_fa}")
+        if input.viruses_fa.endswith('.gz'):
+            shell("gunzip -c {input.viruses_fa} >> {output.combined_fa}")
+        else:
+            shell("cat {input.viruses_fa} >> {output.combined_fa}")
+        shell("samtools faidx {output.combined_fa}")
 
 rule index_combined_reference:
     input:
