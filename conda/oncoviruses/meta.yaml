@@ -37,5 +37,4 @@ test:
 about:
   home: {{ data['url'] }}
   license: {{ data['license'] }}
-  license_family: {{ data['license_family'] }}
   summary: {{ data['description'] }}

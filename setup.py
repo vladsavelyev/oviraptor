@@ -16,8 +16,7 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     url='https://github.com/umccr/' + pkg,
-    license='GNU General Public License v3 (GPLv3)',
-    license_family='GPLv3',
+    license='GPLv3',
     package_data={
         pkg: find_package_files('', pkg),
     },
