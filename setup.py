@@ -3,7 +3,7 @@ from os.path import join
 from setuptools import setup, find_packages
 from versionpy import get_version, find_package_files, get_reqs
 
-pkg = 'oncoviruses'
+pkg = 'ovirage'
 version = get_version(pkg)
 
 setup(
@@ -25,7 +25,7 @@ setup(
     zip_safe=False,
     install_requires=get_reqs(),
     scripts=[
-        join('scripts', 'oncoviruses'),
+        join('scripts', 'ovirage'),
     ],
     classifiers=[
         'Environment :: Console',

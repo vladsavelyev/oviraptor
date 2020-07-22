@@ -2,7 +2,7 @@ import sys
 from os.path import dirname, abspath, join
 from ngs_utils import logger
 import numpy as np
-from oncoviruses import polyidus
+from ovirage import polyidus
 
 
 def package_path():

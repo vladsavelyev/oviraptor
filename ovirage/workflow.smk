@@ -5,7 +5,7 @@ import subprocess
 from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz
 from ngs_utils.logger import warn, critical
 from ngs_utils.vcf_utils import count_vars
-from oncoviruses import package_path
+from ovirage import package_path
 
 
 #############################

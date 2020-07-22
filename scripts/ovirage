@@ -8,7 +8,7 @@ from ngs_utils import logger as log
 from ngs_utils.snakemake_utils import run_snakemake
 from ngs_utils.utils import set_locale; set_locale()
 from ngs_utils import conda_utils
-from oncoviruses import package_path
+from ovirage import package_path
 
 
 @click.command()
@@ -54,7 +54,7 @@ def main(bam, output_dir, viruses=None, only_detect=False,
     if not sample_name:
         sample_name = splitext(basename(bam))[0]
 
-    output_dir = output_dir or 'oncoviruses'
+    output_dir = output_dir or 'ovirage'
     output_dir = safe_mkdir(abspath(output_dir))
     log_dir = safe_mkdir(join(output_dir, 'log'))
     log.init(log_fpath_=join(log_dir, 'command.txt'), save_previous=True)
@@ -108,7 +108,7 @@ def main(bam, output_dir, viruses=None, only_detect=False,
     if not genomes_dir:
         if not combined_fa and not host_fa:
             fa_url = 's3://ngi-igenomes/igenomes/Homo_sapiens/UCSC/hg38/Sequence/WholeGenomeFasta/genome.fa'
-            host_fa = join('oncoviruses', 'hg38.fa')
+            host_fa = join('ovirage', 'hg38.fa')
             cmd = f'aws s3 --no-sign-request cp {fa_url} {host_fa}'
             log.warn(
                 f'The hg38 fasta file is not provided with --host-fa, '
@@ -122,7 +122,7 @@ def main(bam, output_dir, viruses=None, only_detect=False,
                 log.warn()
                 log.warn('You can download the manually with and restart the tool with `--host-fa`, e.g.:')
                 log.warn(f'$ {cmd}')
-                log.warn(f'$ oncoviruses --host-fa {host_fa}')
+                log.warn(f'$ ovirage --host-fa {host_fa}')
                 exit()
             run_simple(cmd)
         if host_fa:
