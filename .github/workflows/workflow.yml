@@ -1,0 +1,40 @@
+name: Build/test/publish conda package
+on: [push, pull_request]
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Setup conda
+        run: |
+          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+            --no-verbose -O miniconda.sh
+          bash miniconda.sh -b
+          export PATH="${HOME}/miniconda3/bin:${PATH}"
+          conda config --set always_yes yes --set changeps1 no
+          conda install -c conda-forge mamba
+          mamba update conda
+          conda config --add channels defaults --add channels vladsaveliev --add channels bioconda \
+            --add channels conda-forge
+          cat $HOME/.condarc
+          mamba install pip versionpy conda-build conda-verify anaconda-client
+
+      - name: Build package
+        run: |
+          export PATH="${HOME}/miniconda3/bin:${PATH}"
+          mamba build conda/*
+
+      - name: Install
+        run: |
+          export PATH="${HOME}/miniconda3/bin:${PATH}"
+          mamba install --use-local $(basename conda/*)
+
+      - name: Upload to anaconda
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          export PATH="${HOME}/miniconda3/bin:${PATH}"
+          conda convert --platform osx-64 ${HOME}/miniconda3/conda-bld/linux-64/*.tar.bz2 \
+                             --output-dir ${HOME}/miniconda3/conda-bld/ &&
+          anaconda -t ${{ secrets.ANACONDA_TOKEN }} upload ${HOME}/miniconda3/conda-bld/**/*.tar.bz2
