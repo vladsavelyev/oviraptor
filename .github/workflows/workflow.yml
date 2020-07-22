@@ -19,24 +19,24 @@ jobs:
           conda config --set always_yes yes --set changeps1 no
           conda install -c conda-forge mamba
           mamba update conda
-          conda config --add channels defaults --add channels vladsaveliev --add channels bioconda \
-            --add channels conda-forge
+          conda config --add channels defaults --add channels vladsaveliev
+            --add channels bioconda --add channels conda-forge
           mamba install pip versionpy conda-build conda-verify anaconda-client
 
       - name: Build package
         run: |
-          mamba build conda/*
+          mamba build conda/$(basename $GITHUB_REPOSITORY)
 
       - name: Install
         run: |
-          mamba install --use-local $(basename conda/*)
+          mamba install --use-local $(basename $GITHUB_REPOSITORY)
 
       - name: Test
         run: |
           export PATH="${HOME}/miniconda3/bin:${PATH}"
           cd test
-          wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/chromosomes/chr8.fa.gz
-          oncoviruses T_SRR7890936_50pc-ready.bam -o results
+          wget --no-verbose https://hgdownload.soe.ucsc.edu/goldenPath/hg38/chromosomes/chr8.fa.gz
+          oncoviruses T_SRR7890936_50pc-ready.bam -o results --host-fa chr8.fa.gz
 
       - name: Upload to anaconda
         if: startsWith(github.ref, 'refs/tags/')
