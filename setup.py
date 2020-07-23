@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import os
 from os.path import join
-from setuptools import setup, find_packages
+from setuptools import setup
 
 pkg = 'ovirage'
 
@@ -37,7 +37,8 @@ setup(
     install_requires=[
         'versionpy',
         'click',
-        'ngs_utils'
+        'ngs_utils',
+        'numpy'  # for lumpy extractSplitReads_BwaMem
     ],
     scripts=[
         join('scripts', 'ovirage'),
@@ -53,5 +54,6 @@ setup(
         'Operating System :: Unix',
         'Programming Language :: Python',
         'Topic :: Scientific/Engineering',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
 )

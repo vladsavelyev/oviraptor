@@ -1,4 +1,4 @@
-name: Build/test/publish conda package
+name: CI
 on: [push, pull_request]
 
 jobs:

@@ -2,7 +2,7 @@
 
 package:
   name: ovirage
-  version: {{ data.version }}
+  version: {{ data['version'] }}
 
 source:
   path: ../../
