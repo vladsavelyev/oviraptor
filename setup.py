@@ -3,8 +3,7 @@ import os
 from os.path import join
 from setuptools import setup, find_packages
 
-import ovirage
-pkg = ovirage.__name__
+pkg = 'ovirage'
 
 try:
     import versionpy
