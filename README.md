@@ -1,7 +1,11 @@
-# Detection of oncoviruses in tumor whole genome samples
+# 🦕 Oviraptor
+
+![Build](https://github.com/vladsaveliev/oviraptor/workflows/CI/badge.svg) [![Anaconda-Server Badge](https://anaconda.org/vladsaveliev/oviraptor/badges/installer/conda.svg)](https://anaconda.org/vladsaveliev/oviraptor)
+
+Detection of oncoviruses content and integration sites in cancer whole genome data
 
 ```
-ovirage tumor.bam -o results --host-fa hg38.fa
+oviraptor tumor.bam -o results --host-fa hg38.fa
 ```
 
 ## Installation
@@ -9,7 +13,7 @@ ovirage tumor.bam -o results --host-fa hg38.fa
 Via conda:
 
 ```
-conda install -c vladsaveliev ovirage
+conda install -c vladsaveliev oviraptor
 ```
 
 Installing conda is optional if you have the following tools installed and available in $PATH:
@@ -27,8 +31,8 @@ Installing conda is optional if you have the following tools installed and avail
 In this case you can install with:
    
 ```
-git clone --recursive git@github.com:umccr/ovirage.git
-pip install ovirage
+git clone git@github.com:vladsaveliev/oviraptor.git
+pip install oviraptor
 ```
    
 ## Usage
@@ -39,13 +43,13 @@ The tool requires:
  - a human hg38 reference genome fasta file, which can be provided with `--host-fa` as follows:
 
 ```
-ovirage tumor.bam -o results --host-fa hg38.fa
+oviraptor tumor.bam -o results --host-fa hg38.fa
 ```
 
 The tool will also use a pre-packaged hg38 gene coordinates file to annotate the breakpoints. However you can override it with your own annotation file with `--host-gtf`, e.g.:
 
 ```
-ovirage tumor.bam -o results --host-fa hg38.fa --host-gtf Homo_sapiens.GRCh38.gtf.gz
+oviraptor tumor.bam -o results --host-fa hg38.fa --host-gtf Homo_sapiens.GRCh38.gtf.gz
 ```
 
 If the `--host-fa` is not provided, the tool will attempt to download it from [AWS-iGenomes](https://github.com/ewels/AWS-iGenomes) using `awscli` into the output folder (`results/reference`, provided `-o results`), which might take a while and around 3G of space.
@@ -53,19 +57,19 @@ If the `--host-fa` is not provided, the tool will attempt to download it from [A
 The tool can make use of multiple cores. To use 10 CPUs:
 
 ```
-ovirage tumor.bam -o results -t10
+oviraptor tumor.bam -o results -t10
 ```
 
 If you already know your candidate virus and just want to find the integration sites, use:
 
 ```
-ovirage tumor.bam -o results -v HPV18
+oviraptor tumor.bam -o results -v HPV18
 ```
 
 If you don't need integration sites and just want to find viral content, use:
 
 ```
-ovirage tumor.bam -o results --only-detect
+oviraptor tumor.bam -o results --only-detect
 ```
 
 ## Development
@@ -73,8 +77,8 @@ ovirage tumor.bam -o results --only-detect
 To develop, install with `-e` flag to pip:
 
 ```
-git clone --recursive git@github.com:umccr/ovirage.git
-pip install -e ovirage
+git clone --recursive git@github.com:vladsaveliev/oviraptor.git
+pip install -e oviraptor
 ```
 
 

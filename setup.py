@@ -3,7 +3,7 @@ import os
 from os.path import join
 from setuptools import setup
 
-pkg = 'ovirage'
+pkg = 'oviraptor'
 
 try:
     import versionpy
@@ -25,7 +25,7 @@ setup(
     version=version,
     author='Vlad Savelyev',
     author_email='vladislav.sav@gmail.com',
-    description='Oncoviral integration sites in tumor whole genome data',
+    description='Oncoviral integration sites in cancer whole genome data',
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     url=f'https://github.com/umccr/{pkg}',
@@ -41,7 +41,7 @@ setup(
         'numpy'  # for lumpy extractSplitReads_BwaMem
     ],
     scripts=[
-        join('scripts', 'ovirage'),
+        join('scripts', 'oviraptor'),
     ],
     keywords='bioinformatics',
     classifiers=[

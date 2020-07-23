@@ -1,7 +1,7 @@
 {% set data=load_setup_py_data() %}
 
 package:
-  name: ovirage
+  name: oviraptor
   version: {{ data['version'] }}
 
 source:
@@ -35,7 +35,7 @@ requirements:
 
 test:
   commands:
-    - ovirage --help
+    - oviraptor --help
 
 about:
   home: {{ data['url'] }}
