@@ -131,24 +131,10 @@ if not VIRUSES:
         params:
             work_dir = mosdepth_work_dir,
             prefix = mosdepth_prefix,
-            image = 'quay.io/biocontainers/mosdepth:0.2.9--hbeb723e_0'
         threads: THREADS
-        run:
-            chroms_bed = join(params.work_dir, "chroms.bed")
-            awk_cmd = "awk 'BEGIN {{FS=\"\\t\"}}; {{print $1 FS \"0\" FS $2}}'"
-            shell(f'{awk_cmd} {input.fai} > {chroms_bed}')
-            mosdepth_cmd = (
-                f'mosdepth {params.prefix} {input.bam} -t{threads} -n --thresholds 1,5,25 --by {chroms_bed} '
-            )
-            if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
-                bam_dir = abspath(dirname(input.bam))
-                shell(
-                    f'docker run -v{bam_dir}:{bam_dir} -v{params.work_dir}:/work '
-                    f'{params.image} ' +
-                    f'{mosdepth_cmd.replace(params.work_dir, "/work")}'
-                )
-            else:
-                shell(mosdepth_cmd)
+        shell:
+            'mosdepth {params.prefix} {input.bam} -t{threads} -n --thresholds 1,5,25 '
+            '--by <(awk \'BEGIN {{FS="\\t"}}; {{print $1 FS "0" FS $2}}\' {input.fai})'
 
     # we need at least one of these conditions to call significance:
     MIN_1x_PCT = 50.0  #  % of the viral sequence that must be covered at at least 1x (probably non-integrating)

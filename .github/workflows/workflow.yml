@@ -21,8 +21,7 @@ jobs:
           conda config --set always_yes yes --set changeps1 no
           conda install -c conda-forge mamba
           mamba update conda
-          conda config --add channels defaults --add channels vladsaveliev \
-            --add channels bioconda --add channels conda-forge
+          conda config --add channels vladsaveliev --add channels bioconda --add channels conda-forge
           mamba install pip versionpy conda-build conda-verify anaconda-client
 
       - name: Build package
