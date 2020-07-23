@@ -411,13 +411,13 @@ rule run_lumpy:
     group: 'lumpy'
     run:
         tool_cmd = (
-            '-mw 4 '
-            '-tt 0 '
-            '-x {input.blacklist} '
-            '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,'
-            'min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
-            '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
-            '> {output.vcf}'
+            f'-mw 4 '
+            f'-tt 0 '
+            f'-x {input.blacklist} '
+            f'-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,'
+            f'min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
+            f'-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
+            f'> {output.vcf}'
         )
         if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
             volumes_dict = dict()
