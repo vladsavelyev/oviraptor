@@ -29,6 +29,7 @@ requirements:
     - mosdepth
     - minimap2
     - bcftools
+    - bedtools
     - pysam  # to process tje BAM file for lumpy
     - awscli  # to download the reference fasta
 
