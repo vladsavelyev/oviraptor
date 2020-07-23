@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
 import subprocess
+from ngs_utils.call_process import run_simple
 from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz
 from ngs_utils.logger import warn, critical
 from ngs_utils.vcf_utils import count_vars
@@ -103,12 +104,14 @@ if not VIRUSES:
 
             if ALIGNER == 'bwa':
                 # -Y  = use soft clipping for supplementary alignments
-                shell("bwa mem -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2} "
-                      " | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
+                shell(f"bwa mem -Y -t{threads} -R '{params.rg}'"
+                      f" {input.gdc_fa} {input.fq1} {input.fq2} "
+                      f" | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
             else:
                 # -Y  = use soft clipping for supplementary alignments
-                shell("minimap2 -ax sr -Y -t{threads} -R '{params.rg}' {input.gdc_fa} {input.fq1} {input.fq2}"
-                    " | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
+                shell(f"minimap2 -ax sr -Y -t{threads} -R '{params.rg}'"
+                      f" {input.gdc_fa} {input.fq1} {input.fq2}"
+                      f" | samtools sort -@{threads} -Obam -o {output.gdc_bam}")
 
     rule index_virus_bam:
         input:
@@ -178,7 +181,7 @@ if not VIRUSES:
                     f'Not found any viruses with significant coverage. '
                     f'You can explore the full list at {input.tsv} and rerun with '
                     f'the --virus option explicitly.')
-                shell('touch {output.selected_viruses_tsv}')
+                shell(f'touch {output.selected_viruses_tsv}')
             else:
                 print(f'Found viruses: {", ".join(viruses)}')
                 with open(output.selected_viruses_tsv, 'w') as out:
@@ -220,12 +223,14 @@ rule bwa_unmapped_and_mateunmapped_to_viral_ref:
             # -T1 = minimum score to output [default 30]
             # -a  = output all alignments for SE or unpaired PE
             # -Y  = use soft clipping for supplementary alignments
-            shell("bwa mem -a -Y -t{threads} -R '{params.rg}' {input.virus_fa} {input.fq1} {input.fq2}"
-                " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
+            shell(f"bwa mem -a -Y -t{threads} -R '{params.rg}'"
+                  f" {input.virus_fa} {input.fq1} {input.fq2}"
+                  f" | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
         else:
             # -Y  = use soft clipping for supplementary alignments
-            shell("minimap2 -ax sr -Y -t{threads} -R '{params.rg}' {input.virus_fa} {input.fq1} {input.fq2}"
-                " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
+            shell(f"minimap2 -ax sr -Y -t{threads} -R '{params.rg}'"
+                  f" {input.virus_fa} {input.fq1} {input.fq2}"
+                  " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
 
 
 # Extracts reads with at least 50 soft-clipped base stretches.
@@ -277,14 +282,14 @@ rule create_combined_reference:
         combined_fai = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.fai',
     run:
         if input.host_fa.endswith('.gz'):
-            shell("gunzip -c {input.host_fa} > {output.combined_fa}")
+            shell(f"gunzip -c {input.host_fa} > {output.combined_fa}")
         else:
-            shell("cat {input.host_fa} > {output.combined_fa}")
+            shell(f"cat {input.host_fa} > {output.combined_fa}")
         if input.viruses_fa.endswith('.gz'):
-            shell("gunzip -c {input.viruses_fa} >> {output.combined_fa}")
+            shell(f"gunzip -c {input.viruses_fa} >> {output.combined_fa}")
         else:
-            shell("cat {input.viruses_fa} >> {output.combined_fa}")
-        shell("samtools faidx {output.combined_fa}")
+            shell(f"cat {input.viruses_fa} >> {output.combined_fa}")
+        shell(f"samtools faidx {output.combined_fa}")
 
 rule index_combined_reference:
     input:
@@ -312,12 +317,14 @@ rule bwa_viral_bridging_to_comb_ref:
             # -T1 = minimum score to output [default 30]
             # -a  = output all alignments for SE or unpaired PE
             # -Y  = use soft clipping for supplementary alignments
-            shell("bwa mem -a -Y -t{threads} -R '{params.rg}' {input.host_fa} {input.fq1} {input.fq2}"
-                " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}")
+            shell(f"bwa mem -a -Y -t{threads} -R '{params.rg}'"
+                  f" {input.host_fa} {input.fq1} {input.fq2}"
+                  f" | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}")
         else:
             # -Y  = use soft clipping for supplementary alignments
-            shell("minimap2 -ax sr -Y -t{threads} -R '{params.rg}' {input.host_fa} {input.fq1} {input.fq2}"
-                " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}")
+            shell(f"minimap2 -ax sr -Y -t{threads} -R '{params.rg}'"
+                  f" {input.host_fa} {input.fq1} {input.fq2}"
+                  f" | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}")
 
 # # Removing reads that are not helpful: fully unmapped pairs. In other words, keeping
 # # mapped pairs and pairs with an unmapped mate that can bridge us to the host genome
@@ -419,19 +426,27 @@ rule run_lumpy:
             f'-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
             f'> {output.vcf}'
         )
-        if subprocess.run(f'docker images -q {params.image} 2>/dev/null', shell=True).returncode == 0:
-            volumes_dict = dict()
-            for inp_path in input:
-                volumes_dict[dirname(inp_path)] = dirname(inp_path)
-            volumes_arg = " ".join(f"-v{k}:{v}" for k, v in volumes_dict.items())
-            shell(
-                f'docker run ' 
-                f'{volumes_arg} '
-                f'{params.image} '
-                f'bash -c "lumpy {tool_cmd}"'
-            )
+        try:
+            run_simple(f'{params.lumpy} 2>&1 | grep -q Program')
+        except:
+            # otherwise, try one from docker (will pull automatically):
+            try:
+                run_simple(f'docker images -q {params.image} 2>/dev/null')
+            except:
+                critical(f'Can\'t run lumpy either from {params.lumpy}, or using Docker')
+            else:
+                volumes_dict = dict()
+                for inp_path in input:
+                    volumes_dict[dirname(inp_path)] = dirname(inp_path)
+                volumes_arg = " ".join(f"-v{k}:{v}" for k, v in volumes_dict.items())
+                shell(
+                    f'docker run ' 
+                    f'{volumes_arg} '
+                    f'{params.image} '
+                    f'bash -c "lumpy {tool_cmd}"'
+                )
         else:
-            shell('{params.lumpy} {tool_cmd}')
+            shell(f'{params.lumpy} {tool_cmd}')
 
 # - gsort is not working because it sorts the header and puts the first line
 # in the VCF in the middle, leading to downstream failues
@@ -516,8 +531,8 @@ rule filter_vcf:
     input:
         vcf = sv_output_rule.output.vcf
     output:
-        vcf = join(WORK_DIR, 'step10_{virus}_manta_filter/breakpoints.vcf.gz'),
-        tbi = join(WORK_DIR, 'step10_{virus}_manta_filter/breakpoints.vcf.gz.tbi'),
+        vcf = join(WORK_DIR, 'step10_{virus}_filter_vcf/breakpoints.vcf.gz'),
+        tbi = join(WORK_DIR, 'step10_{virus}_filter_vcf/breakpoints.vcf.gz.tbi'),
     shell:
         "bcftools view {input.vcf} | "
         "egrep -e '^#|{wildcards.virus}' | "
@@ -580,7 +595,7 @@ rule annotate_with_viral_genes:
         genes_bed = join(package_path(), 'data', f'{wildcards.virus}.bed')
         if not isfile(genes_bed):
             warn(f'No genes data for virus {wildcards.virus}, skipping annotation')
-            shell('cp {input.vcf} {output.vcf}')
+            shell(f'cp {input.vcf} {output.vcf}')
         else:
             overlap_with_genes(input.vcf, output.vcf, genes_bed, params.work_dir,
                 'ViralGenes',
@@ -600,14 +615,14 @@ if GTF_PATH:  # user provided GTF file - overriding the default annotation BED
             # in order to pad genes by 100kb, we first need to subset the GTF to main chromosomes, and
             # remove chr prefixes from the fai file for bedtools.
             hg38_fai_to_grch38 = join(params.work_dir, 'grch38_noalt.fai')
-            shell("cat {input.fai} | grep chr | sed 's/chrM/MT/' | sed 's/chr//' > {hg38_fai_to_grch38}")
+            shell(f"cat {input.fai} | grep chr | sed 's/chrM/MT/' | sed 's/chr//' > {hg38_fai_to_grch38}")
 
             grch38_noalt_bed = join(params.work_dir, 'grch38_noalt.bed')
-            shell("cat {hg38_fai_to_grch38} | awk '{{printf(\"%s\\t0\\t%d\\n\", $1, $2, $2-1)}}'"
-                  " > {grch38_noalt_bed}")
+            shell(f"cat {hg38_fai_to_grch38} | awk '{{printf(\"%s\\t0\\t%d\\n\", $1, $2, $2-1)}}'"
+                  f" > {grch38_noalt_bed}")
 
-            shell("bedtools intersect -a {input.gtf_path} -b {grch38_noalt_bed}"
-                  " | grep -w gene | sed 's/^MT/M/' | sed 's/^/chr/' > {output.gtf}")
+            shell(f"bedtools intersect -a {input.gtf_path} -b {grch38_noalt_bed}"
+                  f" | grep -w gene | sed 's/^MT/M/' | sed 's/^/chr/' > {output.gtf}")
 
     rule gtf_to_bed:
         input:
@@ -692,10 +707,10 @@ rule merged_viruses:
         RESULT_PATH
     run:
         if len(input) == 0:
-            shell('touch {output}')
+            shell(f'touch {output}')
         else:
             if len(input) > 1:
-                shell('bcftools merge {input} -Oz -o {output}')
+                shell(f'bcftools merge {input} -Oz -o {output}')
             else:
-                shell('cp {input} {output}')
-            shell('tabix -p vcf {output}')
+                shell(f'cp {input} {output}')
+            shell(f'tabix -p vcf {output}')
