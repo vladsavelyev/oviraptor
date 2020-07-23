@@ -1,33 +1,34 @@
-{% set data = load_setup_py_data() %}
+{% set data=load_setup_py_data() %}
 
 package:
   name: ovirage
-  version: {{ data['version'] }}
+  version: {{ data.version }}
 
 source:
   path: ../../
 
 build:
   number: 0
-  script: python setup.py install --single-version-externally-managed --record=record.txt
 
 requirements:
   build:
     - python
-    - versionpy
-    - ngs_utils >=2.7.0
+      {% for dep in data.get("install_requires", []) -%}
+      - {{ dep.lower() }}
+      {% endfor %}
 
   run:
     - python
-    - ngs_utils >=2.7.0
-    - click
-    - snakemake
+      {% for dep in data.get("install_requires", []) -%}
+      - {{ dep.lower() }}
+      {% endfor %}
+    - snakemake-minimal
     - samtools
     - sambamba
     - mosdepth
     - minimap2
     - bcftools
-    - pysam  # to process BAM file for lumpy
+    - pysam  # to process tje BAM file for lumpy
     - awscli  # to download the reference fasta
 
 test:

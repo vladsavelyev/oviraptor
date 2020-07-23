@@ -1,10 +1,24 @@
 #!/usr/bin/env python
+import os
 from os.path import join
 from setuptools import setup, find_packages
-from versionpy import get_version, find_package_files, get_reqs
 
-pkg = 'ovirage'
-version = get_version(pkg)
+import ovirage
+pkg = ovirage.__name__
+
+try:
+    import versionpy
+except ImportError:
+    res = input('Installation requires versionpy. Install it now? [Y/n]')
+    if res.lower().startswith('n'):
+        raise
+    os.system('pip install versionpy')
+    import versionpy
+
+version = versionpy.get_version(pkg)
+package_data = {
+    pkg: versionpy.find_package_files('', pkg)
+}
 
 setup(
     name=pkg,
@@ -15,18 +29,21 @@ setup(
     description='Oncoviral integration sites in tumor whole genome data',
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
-    url='https://github.com/umccr/' + pkg,
+    url=f'https://github.com/umccr/{pkg}',
     license='GPLv3',
-    package_data={
-        pkg: find_package_files('', pkg),
-    },
-    packages=find_packages(),
+    packages=[pkg],
+    package_data=package_data,
     include_package_data=True,
     zip_safe=False,
-    install_requires=get_reqs(),
+    install_requires=[
+        'versionpy',
+        'click',
+        'ngs_utils'
+    ],
     scripts=[
         join('scripts', 'ovirage'),
     ],
+    keywords='bioinformatics',
     classifiers=[
         'Environment :: Console',
         'Intended Audience :: Science/Research',
