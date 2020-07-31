@@ -596,6 +596,7 @@ rule annotate_with_viral_genes:
         if not isfile(genes_bed):
             warn(f'No genes data for virus {wildcards.virus}, skipping annotation')
             shell(f'cp {input.vcf} {output.vcf}')
+            shell(f'cp {input.vcf}.tbi {output.vcf}.tbi')
         else:
             overlap_with_genes(input.vcf, output.vcf, genes_bed, params.work_dir,
                 'ViralGenes',

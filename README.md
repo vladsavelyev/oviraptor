@@ -25,8 +25,7 @@ Installing conda is optional if you have the following tools installed and avail
 - `bcftools`
 - `mosdepth`
 - `snakemake`
-- `lumpy` (on macOS, you can pull a dockerized version 
-           with `docker pull quay.io/biocontainers/lumpy-sv:0.3.0--h0b85cd1_0`)
+- on macOS, you need `docker` running so Oviraptor pulls the `lumpy` image `docker pull quay.io/biocontainers/lumpy-sv:0.3.0--h0b85cd1_0`)
    
 In this case you can install with:
    

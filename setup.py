@@ -25,7 +25,7 @@ setup(
     version=version,
     author='Vlad Savelyev',
     author_email='vladislav.sav@gmail.com',
-    description='Oncoviral integration sites in cancer whole genome data',
+    description='Oncoviral integration in cancer whole genome data',
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     url=f'https://github.com/umccr/{pkg}',
