@@ -36,8 +36,7 @@ jobs:
         run: |
           export PATH="${HOME}/miniconda3/bin:${PATH}"
           cd test
-          wget --no-verbose https://hgdownload.soe.ucsc.edu/goldenPath/hg38/chromosomes/chr8.fa.gz
-          oviraptor T_SRR7890936_50pc-ready.bam -o results --host-fa chr8.fa.gz
+          source test.sh
 
       - name: Upload to anaconda
         if: "startsWith(github.ref, 'refs/tags/')"

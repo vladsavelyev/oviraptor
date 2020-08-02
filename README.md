@@ -42,6 +42,7 @@ The tool requires:
  - a human hg38 reference genome fasta file, which can be provided with `--host-fa` as follows:
 
 ```
+wget --no-verbose https://hgdownload.soe.ucsc.edu/goldenPath/hg38/chromosomes/chr8.fa.gz
 oviraptor test/tumor.bam -o test/results --host-fa test/chr8.fa.gz
 ```
 
