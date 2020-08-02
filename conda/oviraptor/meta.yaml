@@ -9,16 +9,17 @@ source:
 
 build:
   number: 0
+  noarch: python
 
 requirements:
   build:
-    - python {{ python }}
+    - python >= 3.6
     {% for dep in data.get("install_requires", []) -%}
     - {{ dep.lower() }}
     {% endfor %}
 
   run:
-    - python
+    - python >= 3.6
     {% for dep in data.get("install_requires", []) -%}
     - {{ dep.lower() }}
     {% endfor %}
@@ -29,7 +30,6 @@ requirements:
     - minimap2
     - bcftools
     - bedtools
-    - pysam  # to process the BAM file for lumpy
     - awscli  # to download the reference fasta
 
 test:

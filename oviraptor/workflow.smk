@@ -375,17 +375,12 @@ rule lumpy_histo_bam_subset:
     output:
         bam = join(WORK_DIR, 'step8_{virus}_lumpy/10kreads.bam')
     params:
-        pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py')
+        pairend_distro = join(package_path(), 'lumpy', 'pairend_distro.py'),
     group: 'lumpy'
-    run:
-        import pysam
-        inp_bam = pysam.AlignmentFile(input.bam, 'rb')
-        out_bam = pysam.AlignmentFile(output.bam, 'wb', template=inp_bam)
-        for i, read in enumerate(inp_bam):
-            if i < 10000:
-                out_bam.write(read)
-            else:
-                break
+    shell:
+        '(samtools view -H {input.bam} ; \
+         samtools view {input.bam} | head -n10000 || true) | \
+        samtools view -b -o {output.bam}'
 
 rule lumpy_histo:
     input:
