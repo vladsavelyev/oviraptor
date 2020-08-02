@@ -23,5 +23,5 @@ var/
 .installed.cfg
 *.egg
 
-test/results*
+test/*results*
 test/chr8.fa.gz
