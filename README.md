@@ -1,8 +1,10 @@
-# 🦕 ![Oviraptor](oviraptor/logo.png "Oviraptor" | width=100)
+# <img src=oviraptor/logo.png alt=Oviraptor height=80px style="margin-bottom: -10px" /> 
 
 ![Build](https://github.com/vladsaveliev/oviraptor/workflows/CI/badge.svg) [![Anaconda-Server Badge](https://anaconda.org/vladsaveliev/oviraptor/badges/installer/conda.svg)](https://anaconda.org/vladsaveliev/oviraptor)
 
 Oviraptor detects oncoviruses and their integration sites in whole genome sequencing data
+
+## Usage
 
 ```
 oviraptor tumor.bam -o results --host-fa hg38.fa
@@ -81,7 +83,7 @@ git clone --recursive git@github.com:vladsaveliev/oviraptor.git
 pip install -e oviraptor
 ```
 
-
+## 🦕
 
 
 
