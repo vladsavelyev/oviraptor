@@ -138,21 +138,21 @@ def main(bam, output_dir, viruses=None, only_detect=False,
     run_snakemake(join(package_path(), "workflow.smk"), conf, cores=cores, output_dir=output_dir,
                   unlock=unlock, dryrun=dryrun)
 
-    result_path = join(output_dir, 'breakpoints.vcf.gz')
     prio_tsv = join(output_dir, 'prioritized_oncoviruses.tsv')
+    bp_vcf = join(output_dir, 'breakpoints.vcf')
     if only_detect:
         log.info(
             f'Detected prioritized oncoviruses are reported in:\n {prio_tsv}\n '
-            f'You can pick the significan ones and rerun the tool with '
+            f'You can pick significant ones and rerun the tool with '
             f'the `--virus` option and without `--only-detect`'
         )
-    elif not verify_file(result_path, silent=True):
+    elif not verify_file(bp_vcf, silent=True):
         log.warn(
-            f'Not found any viruses with significant coverage. '
-            f'You can explore the full list at:\n {prio_tsv}\n and rerun with '
+            f'Not found any viruses with a significant coverage. '
+            f'You can explore the list at:\n {prio_tsv}\n and rerun with '
             f'the --virus option explicitly.')
     else:
-        log.info(f'Breakpoints reported in:\n {result_path}\n'
+        log.info(f'Breakpoints reported in:\n {bp_vcf}\n'
                  f'Prioritized viruses reported in:\n {prio_tsv}')
 
 

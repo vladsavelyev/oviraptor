@@ -15,7 +15,7 @@ from oviraptor import package_path
 ## Inputs
 INPUT_BAM = config['input_bam']
 OUTPUT_DIR = abspath(config['output_dir'])
-RESULT_PATH = join(OUTPUT_DIR, 'breakpoints.vcf.gz')
+RESULT_PATH = join(OUTPUT_DIR, 'breakpoints.vcf')
 PRIO_TSV = join(OUTPUT_DIR, 'prioritized_oncoviruses.tsv')
 
 ## Other parameters
@@ -179,7 +179,7 @@ if not VIRUSES:
                             viruses.append(virus)
             if not viruses:
                 warn(
-                    f'Not found any viruses with significant coverage. '
+                    f'Not found any viruses with a significant coverage. '
                     f'You can explore the full list at {input.tsv} and rerun with '
                     f'the --virus option explicitly.')
                 shell(f'touch {output.selected_viruses_tsv}')
@@ -527,20 +527,42 @@ rule filter_vcf:
     input:
         vcf = sv_output_rule.output.vcf
     output:
-        vcf = join(WORK_DIR, 'step10_{virus}_filter_vcf/breakpoints.vcf.gz'),
-        tbi = join(WORK_DIR, 'step10_{virus}_filter_vcf/breakpoints.vcf.gz.tbi'),
+        vcf = join(WORK_DIR, 'step10_{virus}_filter_vcf/breakpoints.vcf'),
     shell:
         "bcftools view {input.vcf} | "
         "egrep -e '^#|{wildcards.virus}' | "
-        "bcftools filter -e \"IMPRECISE=1\" -Oz -o {output.vcf}"
-        " && tabix -p vcf {output.vcf}"
+        "bcftools filter -e \"IMPRECISE=1\" -o {output.vcf}"
+
+# Lumpy uses 0-based coordinate, we need to convert to 1-based coordinates
+# to comply with VCF format and bedtools
+rule fix_lumpy_vcf:
+    input:
+        vcf = rules.filter_vcf.output.vcf
+    output:
+        vcf = join(WORK_DIR, 'step10_{virus}_filter_vcf/breakpoints.1based.vcf'),
+    run:
+        with open_gzipsafe(input.vcf) as inp_f, open(output.vcf, 'w') as out_f:
+            for l in inp_f:
+                if l.startswith('#'):
+                    out_f.write(l)
+                else:
+                    fields = l.strip().split('\t')
+                    try:
+                        start = int(fields[1])
+                    except:
+                        pass
+                    else:
+                        start += 1
+                        fields[1] = str(start)
+                    out_f.write('\t'.join(fields) + '\n')
 
 # bcftools doesn't work with 4th columns in bed
 # vcfanno doesn't work when mulitple genes overlaping one variant
 # so using bedtools intersect plus a loop over the VCF
 def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_name, anno_desc):
     overlap_tsv = join(work_dir, 'overlap.tsv')
-    shell(f'bedtools intersect -a {vcf_path} -b {genes_path} -loj > {overlap_tsv}')
+    # -nonamecheck to avoid "has inconsistent naming convention for record" warnings
+    shell(f'bedtools intersect -nonamecheck -a {vcf_path} -b {genes_path} -loj > {overlap_tsv}')
     gene_by_id = defaultdict(list)
     with open(overlap_tsv) as f:
         for l in f:
@@ -572,7 +594,6 @@ def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_nam
                     info += f';{anno_name}={",".join(genes)}'
                 fields[7] = info
                 out_f.write('\t'.join(fields) + '\n')
-    shell(f'bgzip {ungz} && tabix -p vcf {gz}')
 
     before = count_vars(vcf_path)
     after = count_vars(output_vcf_path)
@@ -580,11 +601,9 @@ def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_nam
 
 rule annotate_with_viral_genes:
     input:
-        vcf = rules.filter_vcf.output.vcf,
-        tbi = rules.filter_vcf.output.tbi,
+        vcf = rules.fix_lumpy_vcf.output.vcf,
     output:
-        vcf = join(WORK_DIR, 'step11_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz'),
-        tbi = join(WORK_DIR, 'step11_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz.tbi'),
+        vcf = join(WORK_DIR, 'step11_{virus}_viral_genes/breakpoints.viral_genes.vcf'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf)
     run:
@@ -592,7 +611,6 @@ rule annotate_with_viral_genes:
         if not isfile(genes_bed):
             warn(f'No genes data for virus {wildcards.virus}, skipping annotation')
             shell(f'cp {input.vcf} {output.vcf}')
-            shell(f'cp {input.vcf}.tbi {output.vcf}.tbi')
         else:
             overlap_with_genes(input.vcf, output.vcf, genes_bed, params.work_dir,
                 'ViralGenes',
@@ -643,7 +661,7 @@ rule annotate_with_disrupted_host_genes:
         bed = host_genes_bed,
         fai = rules.create_combined_reference.output.combined_fa + '.fai',
     output:
-        vcf = join(WORK_DIR, 'step12_{virus}_host_genes_disrupted/breakpoints.annotated.vcf.gz'),
+        vcf = join(WORK_DIR, 'step12_{virus}_host_genes_disrupted/breakpoints.annotated.vcf'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf)
     run:
@@ -677,7 +695,7 @@ rule annotate_with_host_genes_upstream:
         bed = rules.slop_host_bed.output.bed,
         fai = rules.create_combined_reference.output.combined_fa + '.fai',
     output:
-        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
+        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf),
         bases_upstream = HOST_GENES_BASES_UPSTREAM,
@@ -710,4 +728,3 @@ rule merged_viruses:
                 shell(f'bcftools merge {input} -Oz -o {output}')
             else:
                 shell(f'cp {input} {output}')
-            shell(f'tabix -p vcf {output}')
