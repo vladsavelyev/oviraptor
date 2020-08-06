@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
 import subprocess
+import platform
 from ngs_utils.call_process import run_simple
 from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz
 from ngs_utils.logger import warn, critical
@@ -408,7 +409,7 @@ rule run_lumpy:
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
     params:
-        lumpy = join(package_path(), 'lumpy', 'lumpy'),
+        lumpy = join(package_path(), 'lumpy', 'lumpy_macos' if platform.system() == 'Darwin' else 'lumpy_linux'),
         image = 'quay.io/biocontainers/lumpy-sv:0.3.0--h0b85cd1_0'
     group: 'lumpy'
     run:
