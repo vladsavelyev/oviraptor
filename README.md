@@ -1,8 +1,8 @@
-# 🦕 Oviraptor
+# 🦕 ![Oviraptor](oviraptor/logo.png "Oviraptor" | width=100)
 
 ![Build](https://github.com/vladsaveliev/oviraptor/workflows/CI/badge.svg) [![Anaconda-Server Badge](https://anaconda.org/vladsaveliev/oviraptor/badges/installer/conda.svg)](https://anaconda.org/vladsaveliev/oviraptor)
 
-Detection of oncoviruses content and integration sites in cancer whole genome data
+Oviraptor detects oncoviruses and their integration sites in whole genome sequencing data
 
 ```
 oviraptor tumor.bam -o results --host-fa hg38.fa
