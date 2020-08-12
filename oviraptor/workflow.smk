@@ -529,9 +529,11 @@ rule filter_vcf:
     output:
         vcf = join(WORK_DIR, 'step10_{virus}_filter_vcf/breakpoints.vcf'),
     shell:
+         # Filtering for BND events involving the virus of interest
+         # with >=5 supporting reads (SU=SR+PE)
         "bcftools view {input.vcf} | "
         "egrep -e '^#|{wildcards.virus}' | "
-        "bcftools filter -e \"IMPRECISE=1\" -o {output.vcf}"
+        "bcftools filter -i \"SVTYPE='BND' && INFO/SU>=5\" -o {output.vcf}"
 
 # Lumpy uses 0-based coordinate, we need to convert to 1-based coordinates
 # to comply with VCF format and bedtools
@@ -706,6 +708,39 @@ rule annotate_with_host_genes_upstream:
             f'of the breakpoint. Based on https://www.biorxiv.org/content/10.1101/2020.02.12.942755v1, '
             f'that reported significant increases in chromatin accessibility exclusively '
             f'within 100 kbp of HPV integration sites.')
+
+rule arriba_input:
+    input:
+        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf'),
+    output:
+        fusions = join(WORK_DIR, 'step14_{virus}_vis/fusions.tsv')
+    run:
+        """ fusions.tsv
+        #gene1	gene2  strand1(gene/fusion)  strand2(gene/fusion)  breakpoint1	breakpoint2
+        BCR	    ABL1   +/+	                 +/+	               22:23632600	9:133729451
+        
+        site1	    site2	    type	      direction1  direction2  split_reads1	split_reads2	
+        splice-site	splice-site	translocation downstream  upstream	  3            	1            
+        
+        discordant_mates coverage1 coverage2 confidence closest_genomic_breakpoint1 closest_genomic_breakpoint2
+        0	             3         9	      high      .                           .
+        filters	fusion_transcript	                 reading_frame peptide_sequence	read_identifiers
+        .	    AGCTTCTCCCT___ATGATGAGTC|GATAACACTCT in-frame	   SFSLTS|ASGDNT	.
+        """
+        with open_gzipsafe(input.vcf) as inp_f, open(output.fusions, 'w') as out_f:
+            for l in inp_f:
+                if l.startswith('#'):
+                    out_f.write(l)
+                else:
+                    fields = l.strip().split('\t')
+                    try:
+                        start = int(fields[1])
+                    except:
+                        pass
+                    else:
+                        start += 1
+                        fields[1] = str(start)
+                    out_f.write('\t'.join(fields) + '\n')
 
 def merge_viruses_input_fn(wildcards):
     if not VIRUSES:
