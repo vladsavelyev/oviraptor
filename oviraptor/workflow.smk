@@ -309,7 +309,8 @@ rule bwa_viral_bridging_to_comb_ref:
         host_fa  = rules.create_combined_reference.output.combined_fa,
         host_bwt = rules.index_combined_reference.output if ALIGNER == 'bwa' else [],
     output:
-        comb_bam_possorted = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam')
+        comb_bam_possorted     = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam'),
+        comb_bam_possorted_bai = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam.bai'),
     threads: THREADS
     params:
         rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
@@ -327,6 +328,7 @@ rule bwa_viral_bridging_to_comb_ref:
             shell(f"minimap2 -ax sr -Y -t{threads} -R '{params.rg}'"
                   f" {input.host_fa} {input.fq1} {input.fq2}"
                   f" | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}")
+        shell(f'samtools index {output.comb_bam_possorted}')
 
 # # Removing reads that are not helpful: fully unmapped pairs. In other words, keeping
 # # mapped pairs and pairs with an unmapped mate that can bridge us to the host genome
@@ -339,14 +341,6 @@ rule bwa_viral_bridging_to_comb_ref:
 #     shell:
 #          "sambamba view -t{threads} -fbam -F 'not unmapped or not mate_is_unmapped' {input.comb_bam_possorted}"
 #          " | samtools sort -@{threads} -Obam -o {output.comb_bam_possorted}"
-
-rule index_comb_ref_bam:
-    input:
-        bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted
-    output:
-        bai = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted + '.bai'
-    shell:
-        "samtools index {input.bam}"
 
 rule extract_discordant:
     input:
@@ -457,7 +451,7 @@ rule sort_vcf:
 rule run_manta:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
-        bai = rules.index_comb_ref_bam.output.bai,
+        bai = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted + '.bai',
         ref = rules.create_combined_reference.output.combined_fa,
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
