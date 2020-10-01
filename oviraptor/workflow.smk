@@ -3,8 +3,7 @@ from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
 import subprocess
 import platform
-from ngs_utils.call_process import run_simple
-from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz
+from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz, safe_mkdir
 from ngs_utils.logger import warn, critical
 from ngs_utils.vcf_utils import count_vars
 from oviraptor import package_path
@@ -80,7 +79,8 @@ rule unmapped_and_mate_unmapped_reads_to_fastq:
         single = join(WORK_DIR, f'step2_host_unmapped_or_mate_unmapped.single.fq'),
     threads: max(10, THREADS)
     shell:
-        "samtools fastq -@{threads} {input.host_bam_namesorted} -1 {output.fq1} -2 {output.fq2} -s {output.single}"
+        "samtools fastq -@{threads} {input.host_bam_namesorted} "
+        "-1 {output.fq1} -2 {output.fq2} -s {output.single}"
 
 
 if not VIRUSES:
@@ -91,7 +91,8 @@ if not VIRUSES:
             fq2 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq2,
             gdc_fa = VIRUSES_FA,
         output:
-            gdc_bam = join(WORK_DIR, 'detect_viral_reference', 'host_unmapped_or_mate_unmapped_to_gdc.bam')
+            gdc_bam = join(WORK_DIR, 'detect_viral_reference',
+                           'host_unmapped_or_mate_unmapped_to_gdc.bam')
         threads: THREADS
         params:
             rg = f'@RG\\tID:{SAMPLE}\\tSM:{SAMPLE}'
@@ -249,9 +250,9 @@ rule extract_viral_and_bridging_reads:
            'step4_host_unmapped_and_bridging_reads_to_{virus}.only_bridging_reads.possorted.bam')
     threads: max(10, THREADS)
     shell:
-         "sambamba view -t{threads} -fbam -F 'not unmapped or not mate_is_unmapped or {sambamba_softclip_expr}'"
-         " {input.virus_bam_possorted}"
-         " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
+        "sambamba view -t{threads} -fbam -F 'not unmapped or not mate_is_unmapped or {sambamba_softclip_expr}'"
+        " {input.virus_bam_possorted}"
+        " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}"
 
 rule namesort_viral_bridging_bam:
     input:
@@ -409,40 +410,20 @@ rule run_lumpy:
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
     params:
-        lumpy = join(package_path(), 'lumpy', 'lumpy_macos' if platform.system() == 'Darwin' else 'lumpy_linux'),
-        image = 'quay.io/biocontainers/lumpy-sv:0.3.0--h0b85cd1_0'
+        lumpy = join(package_path(), 'lumpy', 'lumpy_macos' \
+                if platform.system() == 'Darwin' else 'lumpy_linux'),
+        tmp_dir = safe_mkdir(join(WORK_DIR, 'step8_{virus}_lumpy_tmpdir'))
     group: 'lumpy'
-    run:
-        tool_cmd = (
-            f'-mw 4 '
-            f'-tt 0 '
-            f'-x {input.blacklist} '
-            f'-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,'
-            f'min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
-            f'-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
-            f'> {output.vcf}'
-        )
-        try:
-            run_simple(f'{params.lumpy} 2>&1 | grep -q Program')
-        except:
-            # otherwise, try one from docker (will pull automatically):
-            try:
-                run_simple(f'docker images -q {params.image} 2>/dev/null')
-            except:
-                critical(f'Can\'t run lumpy either from {params.lumpy}, or using Docker')
-            else:
-                volumes_dict = dict()
-                for inp_path in input:
-                    volumes_dict[dirname(inp_path)] = dirname(inp_path)
-                volumes_arg = " ".join(f"-v{k}:{v}" for k, v in volumes_dict.items())
-                shell(
-                    f'docker run ' 
-                    f'{volumes_arg} '
-                    f'{params.image} '
-                    f'bash -c "lumpy {tool_cmd}"'
-                )
-        else:
-            shell(f'{params.lumpy} {tool_cmd}')
+    shell:
+        '{params.lumpy} '
+        '-mw 4 '
+        '-tt 0 '
+        '-x {input.blacklist} '
+        '-t {params.tmp_dir} '
+        '-pe id:sample,bam_file:{input.disc},histo_file:{input.histo},mean:500,stdev:50,read_length:151,'
+        'min_non_overlap:151,discordant_z:5,back_distance:10,weight:1,min_mapping_threshold:20 '
+        '-sr id:sample,bam_file:{input.split},back_distance:10,weight:1,min_mapping_threshold:20 '
+        '> {output.vcf}'
 
 # - gsort is not working because it sorts the header and puts the first line
 # in the VCF in the middle, leading to downstream failues
