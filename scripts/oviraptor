@@ -3,7 +3,7 @@ import os
 from os.path import dirname, abspath, join, basename, isfile, isdir, splitext
 import click
 from ngs_utils.call_process import run_simple
-from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir, file_exists, verify_file
+from ngs_utils.file_utils import which, safe_mkdir, splitext_plus, verify_dir, file_exists, verify_file, adjust_path
 from ngs_utils import logger as log
 from ngs_utils.snakemake_utils import run_snakemake
 from ngs_utils.utils import set_locale; set_locale()
@@ -47,7 +47,7 @@ from oviraptor import package_path
 
 def main(bam, output_dir, viruses=None, only_detect=False,
          gtf_file=None, host_fa=None, viruses_fa=None, combined_fa=None, input_genomes_url=None,
-         aligner=None, sample_name=None, requested_cores=None, dryrun=None, unlock=None):
+         aligner=None, sample_name=None, requested_cores=None, unlock=None, dryrun=None):
 
     if not bam.endswith('.bam'):
         raise click.BadParameter(f'Input must be a BAM file, got: {bam}')
@@ -58,7 +58,6 @@ def main(bam, output_dir, viruses=None, only_detect=False,
     output_dir = safe_mkdir(abspath(output_dir))
     log_dir = safe_mkdir(join(output_dir, 'log'))
     log.init(log_fpath_=join(log_dir, 'command.txt'), save_previous=True)
-
     if isfile(join(output_dir, 'work', 'all.done')):
         run_simple('rm ' + join(output_dir, 'work', 'all.done'))
 
@@ -69,8 +68,8 @@ def main(bam, output_dir, viruses=None, only_detect=False,
     if requested_cores:
         cores = min(requested_cores, cores)
     conf = {
-        'input_bam': abspath(bam),
-        'output_dir': abspath(output_dir),
+        'input_bam': adjust_path(bam),
+        'output_dir': adjust_path(output_dir),
         'sample_name': sample_name,
         'cores': cores,
     }
@@ -129,11 +128,6 @@ def main(bam, output_dir, viruses=None, only_detect=False,
             conf['host_fa'] = verify_file(host_fa)
     if gtf_file:
         conf['gtf_file'] = gtf_file
-
-    # Checking that configManta.py and python2 is available, or if running in umccrise envirnoment so _python2 env is there
-    py2_env_path = conda_utils.secondary_conda_env('python2', is_critical=False)
-    if py2_env_path:
-        conf['py2_env_path'] = py2_env_path
 
     run_snakemake(join(package_path(), "workflow.smk"), conf, cores=cores, output_dir=output_dir,
                   unlock=unlock, dryrun=dryrun)
