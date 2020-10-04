@@ -739,6 +739,6 @@ rule merged_viruses:
             shell(f'touch {output}')
         else:
             if len(input) > 1:
-                shell(f'bcftools merge {input} -o {output}')
+                shell(f'bcftools merge --force-samples {input} -o {output}')
             else:
                 shell(f'cp {input} {output}')
