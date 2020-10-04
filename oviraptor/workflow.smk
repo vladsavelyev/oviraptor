@@ -4,7 +4,6 @@ from os.path import isfile, join, basename, dirname, abspath
 import subprocess
 import platform
 
-from ngs_utils.bed_utils import bgzip_and_tabix
 from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz, safe_mkdir
 from ngs_utils.logger import warn, critical
 from ngs_utils.vcf_utils import count_vars
@@ -575,16 +574,16 @@ def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_nam
                 out_f.write('\t'.join(fields) + '\n')
 
     before = count_vars(vcf_path)
-    after = count_vars(output_vcf_path)
+    after = count_vars(ungz)
     assert before == after, (before, after)
     if output_vcf_path.endswith('.gz'):
-        bgzip_and_tabix(ungz)
+        shell(f'bgzip {ungz} && tabix -p vcf {gz}')
 
 rule annotate_with_viral_genes:
     input:
         vcf = rules.fix_lumpy_vcf.output.vcf,
     output:
-        vcf = join(WORK_DIR, 'step11_{virus}_viral_genes/breakpoints.viral_genes.vcf'),
+        vcf = join(WORK_DIR, 'step11_{virus}_viral_genes/breakpoints.viral_genes.vcf.gz'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf)
     run:
