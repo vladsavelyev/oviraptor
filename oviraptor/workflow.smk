@@ -144,7 +144,7 @@ if not VIRUSES:
 
     # we need at least one of these conditions to call significance:
     MIN_1x_PCT = 50.0  #  % of the viral sequence that must be covered at at least 1x (probably non-integrating)
-    MIN_5x_LEN = 300   #  viral base pairs must be covered at at least 5x (which is amplified, thus integrating)
+    MIN_5x_LEN = 1000   #  viral bp must be covered at at least 5x (which is amplified, thus integrating)
     ONCOVIRAL_SOURCE_URL = 'https://gdc.cancer.gov/about-data/data-harmonization-and-generation/gdc-reference-files'
     rule prioritize_viruses:
         input:
@@ -153,7 +153,7 @@ if not VIRUSES:
         output:
             tsv = PRIO_TSV,
         params:
-            completeness_fraction =MIN_1x_PCT / 100.0
+            completeness_fraction = MIN_1x_PCT / 100.0
         shell:
             "echo '## Viral sequences (from {ONCOVIRAL_SOURCE_URL}) found in unmapped reads' > {output.tsv} &&"
             "echo '## Sample: {SAMPLE}' >> {output.tsv} && "
@@ -407,7 +407,7 @@ rule run_lumpy:
     params:
         lumpy = join(package_path(), 'lumpy', 'lumpy_macos' \
                 if platform.system() == 'Darwin' else 'lumpy_linux'),
-        tmp_dir = safe_mkdir(join(WORK_DIR, 'step8_{virus}_lumpy_tmpdir'))
+        tmp_dir = lambda wc: safe_mkdir(join(WORK_DIR, f'step8_{wc.virus}_lumpy_tmpdir'))
     group: 'lumpy'
     shell:
         '{params.lumpy} '
