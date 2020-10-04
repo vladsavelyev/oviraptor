@@ -3,6 +3,8 @@ from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
 import subprocess
 import platform
+
+from ngs_utils.bed_utils import bgzip_and_tabix
 from ngs_utils.file_utils import open_gzipsafe, get_ungz_gz, safe_mkdir
 from ngs_utils.logger import warn, critical
 from ngs_utils.vcf_utils import count_vars
@@ -575,6 +577,8 @@ def overlap_with_genes(vcf_path, output_vcf_path, genes_path, work_dir, anno_nam
     before = count_vars(vcf_path)
     after = count_vars(output_vcf_path)
     assert before == after, (before, after)
+    if output_vcf_path.endswith('.gz'):
+        bgzip_and_tabix(ungz)
 
 rule annotate_with_viral_genes:
     input:
@@ -638,7 +642,7 @@ rule annotate_with_disrupted_host_genes:
         bed = host_genes_bed,
         fai = rules.create_combined_reference.output.combined_fa + '.fai',
     output:
-        vcf = join(WORK_DIR, 'step12_{virus}_host_genes_disrupted/breakpoints.annotated.vcf'),
+        vcf = join(WORK_DIR, 'step12_{virus}_host_genes_disrupted/breakpoints.annotated.vcf.gz'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf)
     run:
@@ -672,7 +676,8 @@ rule annotate_with_host_genes_upstream:
         bed = rules.slop_host_bed.output.bed,
         fai = rules.create_combined_reference.output.combined_fa + '.fai',
     output:
-        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf'),
+        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
+        tbi = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz.tbi'),
     params:
         work_dir = lambda wc, input, output: dirname(output.vcf),
         bases_upstream = HOST_GENES_BASES_UPSTREAM,
@@ -686,7 +691,7 @@ rule annotate_with_host_genes_upstream:
 
 rule arriba_input:
     input:
-        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf'),
+        vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
     output:
         fusions = join(WORK_DIR, 'step14_{virus}_vis/fusions.tsv')
     run:
