@@ -213,8 +213,8 @@ rule bwa_unmapped_and_mateunmapped_to_viral_ref:
     input:
         fq1 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq1,
         fq2 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq2,
-        virus_fa = rules.create_viral_reference.output.virus_fa,
-        virus_bwt = rules.index_viral_reference.output if ALIGNER == 'bwa' else [],
+        virus_fa  =  rules.create_viral_reference.output.virus_fa,
+        virus_bwt = (rules.create_viral_reference.output.virus_fa + '.bwt') if ALIGNER == 'bwa' else [],
     output:
         virus_bam_possorted = join(WORK_DIR, 'step3_host_unmapped_and_bridging_reads_to_{virus}.possorted.bam')
     threads: THREADS
@@ -233,7 +233,7 @@ rule bwa_unmapped_and_mateunmapped_to_viral_ref:
             # -Y  = use soft clipping for supplementary alignments
             shell(f"minimap2 -ax sr -Y -t{threads} -R '{params.rg}'"
                   f" {input.virus_fa} {input.fq1} {input.fq2}"
-                  " | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
+                  f" | samtools sort -@{threads} -Obam -o {output.virus_bam_possorted}")
 
 
 # Extracts reads with at least 50 soft-clipped base stretches.
@@ -293,22 +293,16 @@ rule create_combined_reference:
         else:
             shell(f"cat {input.viruses_fa} >> {output.combined_fa}")
         shell(f"samtools faidx {output.combined_fa}")
-
-rule index_combined_reference:
-    input:
-        COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
-    output:
-        (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.bwt',
-    shell:
-        "bwa index {input}"
+        if ALIGNER == 'bwa':
+            shell(f"bwa index {output.combined_fa}")
 
 # aligning to specific viral sequence
 rule bwa_viral_bridging_to_comb_ref:
     input:
         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
-        host_fa  = rules.create_combined_reference.output.combined_fa,
-        host_bwt = rules.index_combined_reference.output if ALIGNER == 'bwa' else [],
+        host_fa  =  rules.create_combined_reference.output.combined_fa,
+        host_bwt = (rules.create_combined_reference.output.combined_fa + '.bwt') if ALIGNER == 'bwa' else [],
     output:
         comb_bam_possorted     = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam'),
         comb_bam_possorted_bai = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam.bai'),
