@@ -207,8 +207,7 @@ rule bwa_unmapped_and_mateunmapped_to_viral_ref:
     input:
         fq1 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq1,
         fq2 = rules.unmapped_and_mate_unmapped_reads_to_fastq.output.fq2,
-        virus_fa  =  rules.create_viral_reference.output.virus_fa,
-        virus_bwt = (rules.create_viral_reference.output.virus_fa + '.bwt') if ALIGNER == 'bwa' else [],
+        virus_fa = rules.create_viral_reference.output.virus_fa,
     output:
         virus_bam_possorted = join(WORK_DIR, 'step3_host_unmapped_and_bridging_reads_to_{virus}.possorted.bam')
     threads: THREADS
@@ -295,8 +294,7 @@ rule bwa_viral_bridging_to_comb_ref:
     input:
         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
-        host_fa  =  rules.create_combined_reference.output.combined_fa,
-        host_bwt = (rules.create_combined_reference.output.combined_fa + '.bwt') if ALIGNER == 'bwa' else [],
+        host_fa = rules.create_combined_reference.output.combined_fa,
     output:
         comb_bam_possorted     = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam'),
         comb_bam_possorted_bai = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam.bai'),
