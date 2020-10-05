@@ -26,7 +26,7 @@ requirements:
     - snakemake-minimal
     - samtools
     - sambamba
-    - mosdepth
+    - mosdepth >= 0.2.9
     - minimap2
     - bcftools
     - bedtools

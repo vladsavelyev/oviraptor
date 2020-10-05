@@ -144,7 +144,7 @@ if not VIRUSES:
 
     # we need at least one of these conditions to call significance:
     MIN_1x_PCT = 50.0  #  % of the viral sequence that must be covered at at least 1x (probably non-integrating)
-    MIN_5x_LEN = 1000   #  viral bp must be covered at at least 5x (which is amplified, thus integrating)
+    MIN_5x_LEN = 1000  #  viral bp must be covered at at least 5x (which is amplified, thus integrating)
     ONCOVIRAL_SOURCE_URL = 'https://gdc.cancer.gov/about-data/data-harmonization-and-generation/gdc-reference-files'
     rule prioritize_viruses:
         input:
