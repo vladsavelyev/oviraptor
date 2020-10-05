@@ -197,16 +197,10 @@ rule create_viral_reference:
         gdc_fa = VIRUSES_FA,
     output:
         virus_fa = join(WORK_DIR, '{virus}', '{virus}.fa'),
-    shell:
-        "samtools faidx {input.gdc_fa} {wildcards.virus} > {output.virus_fa}"
-
-rule index_viral_reference:
-    input:
-        join(WORK_DIR, '{virus}', '{virus}.fa'),
-    output:
-        join(WORK_DIR, '{virus}', '{virus}.fa.bwt'),  # one of bwa index files
-    shell:
-        "bwa index {input}"
+    run:
+        shell(f"samtools faidx {input.gdc_fa} {wildcards.virus} > {output.virus_fa}")
+        if ALIGNER == 'bwa':
+            shell(f"bwa index {output.virus_fa}")
 
 # aligning to specific viral sequence
 rule bwa_unmapped_and_mateunmapped_to_viral_ref:
