@@ -741,4 +741,4 @@ rule merged_viruses:
             if len(input) > 1:
                 shell(f'bcftools merge --force-samples {input} -o {output}')
             else:
-                shell(f'cp {input} {output}')
+                shell(f'bcftools view {input} -o {output}')
