@@ -27,7 +27,7 @@ requirements:
     - samtools
     - sambamba
     - mosdepth >=0.2.9
-    - minimap2
+    - bwa
     - bcftools
     - bedtools
     - awscli  # to download the reference fasta
