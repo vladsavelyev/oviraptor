@@ -32,7 +32,7 @@ from oviraptor import package_path
                    'and index with `samtools faidx` and `bwa index`')
 @click.option('--genomes', '--genomes-dir', 'input_genomes_url',
               help='Path to the umccrise reference data, alternative to all "*-fa" options. Can be s3 or gds')
-@click.option('--aligner', 'aligner', type=click.Choice('bwa', 'minimap2'),
+@click.option('--aligner', 'aligner', type=click.Choice(['bwa', 'minimap2']),
               help='Aligner to use: bwa or minimap2. BWA is more accurate, '
                    'but minimap2 does not require index and works much faster')
 
