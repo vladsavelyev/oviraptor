@@ -423,7 +423,7 @@ rule run_lumpy:
 rule sort_vcf:
     input:
         vcf = join(WORK_DIR, 'step8_{virus}_lumpy.vcf'),
-        fai = rules.create_combined_reference.output.combined_fa + '.fai',
+        fai = (COMBINED_FA or rules.create_combined_reference.output.combined_fa) + '.fai',
     output:
         vcf = join(WORK_DIR, 'step9_{virus}_lumpy.sorted.vcf'),
     run:
@@ -450,7 +450,7 @@ rule run_manta:
     input:
         bam = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted,
         bai = rules.bwa_viral_bridging_to_comb_ref.output.comb_bam_possorted + '.bai',
-        ref = rules.create_combined_reference.output.combined_fa,
+        ref = (COMBINED_FA or rules.create_combined_reference.output.combined_fa),
     output:
         vcf = join(WORK_DIR, 'step8_{virus}_manta/results/variants/candidateSV.vcf.gz'),
     params:
@@ -598,7 +598,7 @@ if GTF_PATH:  # user provided GTF file - overriding the default annotation BED
     rule prep_gtf:
         input:
             gtf_path = GTF_PATH,
-            fai = rules.create_combined_reference.output.combined_fa + '.fai',
+            fai = (COMBINED_FA or rules.create_combined_reference.output.combined_fa) + '.fai',
         output:
             gtf = join(WORK_DIR, 'host_genes_prep/hg38_noalt.genes.gtf'),
         params:
@@ -636,7 +636,7 @@ rule annotate_with_disrupted_host_genes:
     input:
         vcf = rules.annotate_with_viral_genes.output.vcf,
         bed = host_genes_bed,
-        fai = rules.create_combined_reference.output.combined_fa + '.fai',
+        fai = (COMBINED_FA or rules.create_combined_reference.output.combined_fa) + '.fai',
     output:
         vcf = join(WORK_DIR, 'step12_{virus}_host_genes_disrupted/breakpoints.annotated.vcf.gz'),
     params:
@@ -652,7 +652,7 @@ HOST_GENES_BASES_UPSTREAM = 100_000
 rule slop_host_bed:
     input:
         bed = host_genes_bed,
-        fai = rules.create_combined_reference.output.combined_fa + '.fai',
+        fai = (COMBINED_FA or rules.create_combined_reference.output.combined_fa) + '.fai',
     output:
         bed = join(WORK_DIR, 'host_genes_prep/hg38_noalt_genes_slopped.bed'),
     params:
@@ -670,7 +670,7 @@ rule annotate_with_host_genes_upstream:
     input:
         vcf = rules.annotate_with_disrupted_host_genes.output.vcf,
         bed = rules.slop_host_bed.output.bed,
-        fai = rules.create_combined_reference.output.combined_fa + '.fai',
+        fai = (COMBINED_FA or rules.create_combined_reference.output.combined_fa) + '.fai',
     output:
         vcf = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz'),
         tbi = join(WORK_DIR, 'step13_{virus}_host_genes_upstream/breakpoints.genes.host_cancer_genes.vcf.gz.tbi'),
