@@ -272,14 +272,26 @@ rule viral_bridging_reads_to_fastq:
 rule create_combined_reference:
     input:
         host_fa = HOST_FA,
+        host_fai = HOST_FA + '.fai',
         viruses_fa = VIRUSES_FA,
         noalt_fai = join(package_path(), 'data', 'hg38_noalt.fa.fai'),
     output:
         combined_fa  = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
         combined_fai = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa') + '.fai',
     run:
-        shell(f'samtools faidx {input.host_fa} $(cut -f1 {input.noalt_fai}) '
-              f'> {output.combined_fa}')
+        noalt_chroms = []
+        with open(input.noalt_fai) as f:
+            for line in f:
+                if line.strip():
+                    noalt_chroms.append(line.split('\t')[0])
+        input_chroms = []
+        with open(input.host_fai) as f:
+            for line in f:
+                if line.strip():
+                    input_chroms.append(line.split('\t')[0])
+        input_chroms = [chrom for chrom in input_chroms if chrom in noalt_chroms]
+
+        shell(f"samtools faidx {input.host_fa} {' '.join(input_chroms)} > {output.combined_fa}")
         if input.viruses_fa.endswith('.gz'):
             shell(f"gunzip -c {input.viruses_fa} >> {output.combined_fa}")
         else:
