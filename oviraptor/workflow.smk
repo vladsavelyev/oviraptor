@@ -273,14 +273,13 @@ rule create_combined_reference:
     input:
         host_fa = HOST_FA,
         viruses_fa = VIRUSES_FA,
+        noalt_fai = join(package_path(), 'data', 'hg38_noalt.fa.fai'),
     output:
         combined_fa   = COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
         combined_fai = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.fai',
     run:
-        if input.host_fa.endswith('.gz'):
-            shell(f"gunzip -c {input.host_fa} > {output.combined_fa}")
-        else:
-            shell(f"cat {input.host_fa} > {output.combined_fa}")
+        shell(f'samtools faidx {input.host_fa} $(cut -f1 {input.noalt_fai}) '
+              f'> {output.combined_fa}')
         if input.viruses_fa.endswith('.gz'):
             shell(f"gunzip -c {input.viruses_fa} >> {output.combined_fa}")
         else:
