@@ -275,8 +275,8 @@ rule create_combined_reference:
         viruses_fa = VIRUSES_FA,
         noalt_fai = join(package_path(), 'data', 'hg38_noalt.fa.fai'),
     output:
-        combined_fa   = COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
-        combined_fai = (COMBINED_FA or join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa')) + '.fai',
+        combined_fa  = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa'),
+        combined_fai = join(OUTPUT_DIR, 'combined_reference', 'host_plus_viruses.fa') + '.fai',
     run:
         shell(f'samtools faidx {input.host_fa} $(cut -f1 {input.noalt_fai}) '
               f'> {output.combined_fa}')
@@ -293,7 +293,7 @@ rule bwa_viral_bridging_to_comb_ref:
     input:
         fq1 = rules.viral_bridging_reads_to_fastq.output.fq1,
         fq2 = rules.viral_bridging_reads_to_fastq.output.fq2,
-        host_fa = rules.create_combined_reference.output.combined_fa,
+        host_fa = COMBINED_FA or rules.create_combined_reference.output.combined_fa,
     output:
         comb_bam_possorted     = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam'),
         comb_bam_possorted_bai = join(WORK_DIR, 'step7_{virus}_bridging_to_comb_ref.possorted.bam.bai'),
