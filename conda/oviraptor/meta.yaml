@@ -27,15 +27,15 @@ requirements:
     - samtools
     - sambamba
     - mosdepth >=0.2.9
-    - bwa
-    # - minimap2
+    # - bwa
+    - minimap2
     - bcftools
     - bedtools
     - awscli  # to download the reference fasta
 
 test:
   commands:
-    - oviraptor --help
+    - oviraptor --version
 
 about:
   home: {{ data['url'] }}
