@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 from os.path import isfile, join, basename, dirname, abspath
+import shutil
 import subprocess
 import platform
 
@@ -739,3 +740,8 @@ rule merged_viruses:
                 shell(f'bcftools merge --force-samples {input} -o {output}')
             else:
                 shell(f'bcftools view {input} -o {output}')
+
+
+onsuccess:
+    print("oncoviruses workflow finished! Deleting .snakemake/metadata")
+        shutil.rmtree(".snakemake/metadata")
