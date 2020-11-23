@@ -744,4 +744,4 @@ rule merged_viruses:
 
 onsuccess:
     print("oncoviruses workflow finished! Deleting .snakemake/metadata")
-        shutil.rmtree(".snakemake/metadata")
+    shutil.rmtree(".snakemake/metadata")
